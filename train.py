@@ -238,8 +238,6 @@ def set_config():
     save_file = f"{args.saving_path}{slash}{run_name}.pt"
     config["save_file"] = save_file
 
-    print("Device:", config["device"])
-
     return config
 
 def load_datasets():
@@ -355,7 +353,8 @@ if __name__ == "__main__":
     model, optimizer, cross_entropy_loss = load_model(config)
 
     # weights and biases
-    with wandb.init(project=wandb_project, entity=wandb_username, config=config, name=config["run_name"]):
+    run_name = config["run_name"]
+    with wandb.init(project=wandb_project, entity=wandb_username, config=config, name=run_name):
 
         # access all hyperparameters through wandb.config, so logging matches execution!
         config = wandb.config
