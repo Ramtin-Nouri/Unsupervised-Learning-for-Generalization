@@ -173,7 +173,6 @@ def parse_commandline_arguments():
     parser.add_argument("--learning_rate", type=float, default=0.001)
     parser.add_argument("--optimizer", default="adam")
     parser.add_argument("--pretrained", default=True)
-    parser.add_argument("--device", default="cuda")
     # model architecture
     parser.add_argument("--sequence_architecture", default="lstm_encoder_decoder")
     parser.add_argument("--vision_architecture", default="resnet18")
@@ -215,13 +214,19 @@ def set_config():
         learning_rate=args.learning_rate,
         optimizer=args.optimizer,
         pretrained=args.pretrained == "True",
-        device=(torch.device(args.device) if torch.cuda.is_available() else torch.device("cpu")),
         # model architecture
         sequence_architecture=args.sequence_architecture,
         vision_architecture=args.vision_architecture,
         precooked=args.precooked == "True",
         model_path=args.model_path,
         git_sha=repo.head.object.hexsha)
+
+    if torch.cuda.is_available():
+        config["device"] = torch.device("cuda")
+    else:
+        print_warning("No GPU available, using CPU instead.")
+        config["device"] = torch.device("cpu")
+
 
     # path to save the final state_dict
     version = f"{datetime.now().strftime('%Y')}-{datetime.now().strftime('%m')}-{datetime.now().strftime('%d')}-" \
