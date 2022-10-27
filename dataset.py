@@ -14,27 +14,34 @@ class MultimodalSimulation(Dataset):
     The input sequences are padded with the first frame to the input_length.
     If a stride is given, the input sequences are subsampled.
     
-    #TODO verfiy comment written by Copilot:
     Args:
         path (str): Path to the dataset.
         part (str): Part of the dataset to use. Can be "training", "validation", "constant-test" or "generalization-test".
-        visible_objects (list): List of objects that are visible in the scene. Can be "apple", "banana", "cup", "football", "book", "pylon", "bottle", "star", "ring".
-        different_actions (bool): If True, the actions are different for each object. If False, the actions are the same for all objects.
-        different_colors (bool): If True, the colors are different for each object. If False, the colors are the same for all objects.
-        different_objects (bool): If True, the objects are different for each object. If False, the objects are the same for all objects.
-        exclusive_colors (bool): If True, the colors are exclusive. If False, the colors are not exclusive.
+        visible_objects (int): Number of simultaneously visible objects.
+        different_actions (int): Number of different actions. (actually always 4)
+        different_colors (int): Number of different colors each object can have.
+        different_objects (int): Number of different object types.
+        exclusive_colors (bool): If True, the colors are exclusive to the objects.
         num_samples (int): Number of samples to use.
         input_length (int): Number of frames to use as input.for the model.
         frame_stride (int): Stride to use when reading in the frames.
-        feature_dim (int): Dimension of the feature vector. If None, the feature vector is not used.
         transform (callable, optional): Optional transform to be applied on a sample.
     """
+
+    WIDTH = 398
+    HEIGHT = 224
+    CHANNELS = 3
+    JOINTS = 6
+    DICTIONARY = ["put down", "picked up", "pushed left", "pushed right",
+                           "apple", "banana", "cup", "football", "book", "pylon", "bottle", "star", "ring",
+                           "red", "green", "blue", "yellow", "white", "brown"]
+    LABEL_LENGTH = 19
     def __init__(self, path, part, visible_objects, different_actions, different_colors, different_objects,
-                 exclusive_colors, num_samples, input_length=16, frame_stride=1, feature_dim=None, transform=None):
+                 exclusive_colors, num_samples, input_length=16, frame_stride=1, transform=None):
 
         assert isinstance(path, str) and isinstance(part, str)
         assert part in ["training", "validation", "constant-test", "generalization-test"]
-        assert isinstance(visible_objects, list) and len(visible_objects) <= 6
+        assert isinstance(visible_objects, int) and visible_objects <= 6
 
         if part == "training":
             max_samples_per_dir = 5000
@@ -54,14 +61,8 @@ class MultimodalSimulation(Dataset):
         self.exclusive_colors = exclusive_colors
         self.input_length = input_length
         self.frame_stride = frame_stride
-        self.num_sub_dirs = len(self.visible_objects)
-        self.num_samples_per_dir = min(num_samples // self.num_sub_dirs, max_samples_per_dir)
-        self.num_samples = len(self.visible_objects) * self.num_samples_per_dir
+        self.num_samples = min(num_samples, max_samples_per_dir)
         self.transform = transform
-        self.LABEL_LENGTH = 19
-        self.DICTIONARY = ["put down", "picked up", "pushed left", "pushed right",
-                           "apple", "banana", "cup", "football", "book", "pylon", "bottle", "star", "ring",
-                           "red", "green", "blue", "yellow", "white", "brown"]
 
     def __len__(self):
         return self.num_samples
@@ -71,15 +72,14 @@ class MultimodalSimulation(Dataset):
         # imgs:  path/Vi-Cc-Oo/part/sequence_xxxx/frame_bbbbbb.png - frame_eeeeee.png
         # joints:path/Vi-Cc-Oo/part/sequence_xxxx/frame_bbbbbb.txt - frame_eeeeee.txt
 
-        dir_number = self.visible_objects[item // self.num_samples_per_dir]
-        sequence_number = item % self.num_samples_per_dir
+        dir_number = self.visible_objects
         if self.part == "constant-test":
             dir_path = f"{self.path}/{self.part}/V{dir_number}-test"
         elif self.part == "generalization-test":
             dir_path = f"{self.path}/{self.part}/V{dir_number}-generalization-test"
         else:
             dir_path = f"{self.path}/V{dir_number}-A{self.different_actions}-C{self.different_colors}-O{self.different_objects}{'-X' if self.exclusive_colors else ''}/{self.part}"
-        sequence_path = f"{dir_path}/sequence_{sequence_number:04d}"
+        sequence_path = f"{dir_path}/sequence_{item:04d}"
 
         # reading sentence out of label.npy - NOT one-hot-encoded
         label = torch.from_numpy(np.load(f"{sequence_path}/label.npy")).to(dtype=torch.long)
@@ -96,8 +96,8 @@ class MultimodalSimulation(Dataset):
         # Pad all sequences to the same length
         # If sequence is longer take the last input_length sequences
         # If sequence is shorter repeat the first frame input_length-num_frames times
-        joints = torch.zeros(self.input_length, 6, dtype=torch.float32) # 6 joints
-        frames = torch.zeros(self.input_length, 3, 224, 398, dtype=torch.float32)  # img shape (3, 224, 398) TODO: remove magic numbers
+        joints = torch.zeros(self.input_length, self.JOINTS, dtype=torch.float32) # 6 joints
+        frames = torch.zeros(self.input_length, self.CHANNELS, self.HEIGHT, self.WIDTH, dtype=torch.float32)  # img shape (3, 224, 398)
 
         input_index = self.input_length -1
         for n in range(num_frames-1, -1, -self.frame_stride):
@@ -137,10 +137,10 @@ class MultimodalSimulation(Dataset):
         # all have dtype=torch.float32
         assert frames.shape[0] == self.input_length , f"frames.shape[0] = {frames.shape[0]} != {self.input_length}"
         assert joints.shape[0] == self.input_length, f"joints.shape[0] = {joints.shape[0]} != {self.input_length}"
-        assert frames.shape[1] == 3 , f"frames.shape[1] = {frames.shape[1]} != 3"
-        assert frames.shape[2] == 224, f"frames.shape[2] = {frames.shape[2]} != 224"
-        assert frames.shape[3] == 398, f"frames.shape[3] = {frames.shape[3]} != 398"
-        assert joints.shape[1] == 6, f"joints.shape[1] = {joints.shape[1]} != 6"
+        assert frames.shape[1] == self.CHANNELS , f"frames.shape[1] = {frames.shape[1]} != 3"
+        assert frames.shape[2] == self.HEIGHT, f"frames.shape[2] = {frames.shape[2]} != 224"
+        assert frames.shape[3] == self.WIDTH, f"frames.shape[3] = {frames.shape[3]} != 398"
+        assert joints.shape[1] == self.JOINTS, f"joints.shape[1] = {joints.shape[1]} != 6"
         assert label.shape[0] == 3, f"label.shape[0] = {label.shape[0]} != 3"
         assert frames.dtype == torch.float32, f"frames.dtype = {frames.dtype} != torch.float32"
         assert joints.dtype == torch.float32, f"joints.dtype = {joints.dtype} != torch.float32"

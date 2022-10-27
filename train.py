@@ -186,7 +186,7 @@ def set_config():
     config = dict(
         # dataset
         data_path=args.data_path,
-        visible_objects=[int(args.configuration[1])],
+        visible_objects=int(args.configuration[1]),
         different_actions=int(args.configuration[4]),
         different_colors=int(args.configuration[7]),
         different_objects=int(args.configuration[10]),
@@ -227,9 +227,7 @@ def set_config():
     # path to save the final state_dict
     version = f"{datetime.now().strftime('%Y')}-{datetime.now().strftime('%m')}-{datetime.now().strftime('%d')}-" \
               f"{datetime.now().strftime('%H')}-{datetime.now().strftime('%M')}"
-    visible_objects = ""
-    for visible_obj in config["visible_objects"]:
-        visible_objects += str(visible_obj) + "-"
+    visible_objects = str(config["visible_objects"]) + "-"
     slash = "" if args.saving_path[-1] == "/" else "/"
     run_name = f"{config['sequence_architecture']}-{config['vision_architecture']}-" \
                f"{config['hidden_dim']}-{config['image_features']}-" \
@@ -253,7 +251,6 @@ def load_datasets():
                                          num_samples=config["num_training_samples"],
                                          input_length=config["input_length"],
                                          frame_stride=config["frame_stride"],
-                                         feature_dim=config["convolutional_features"],
                                          transform=transform)
 
     validation_data = MultimodalSimulation(path=config["data_path"],
@@ -266,7 +263,6 @@ def load_datasets():
                                            num_samples=config["num_validation_samples"],
                                            input_length=config["input_length"],
                                            frame_stride=config["frame_stride"],
-                                           feature_dim=config["convolutional_features"],
                                            transform=transform)
 
     # dataloader
@@ -430,7 +426,7 @@ if __name__ == "__main__":
 
         for i in range(1, 7):
             test_data = MultimodalSimulation(path=config["data_path"],
-                                             visible_objects=[i],
+                                             visible_objects=i,
                                              different_actions=config["different_actions"],
                                              different_colors=config["different_colors"],
                                              different_objects=config["different_objects"],
@@ -439,11 +435,10 @@ if __name__ == "__main__":
                                              num_samples=2000,
                                              input_length=config["input_length"],
                                              frame_stride=config["frame_stride"],
-                                             feature_dim=config["convolutional_features"],
                                              transform=transform)
 
             gen_test_data = MultimodalSimulation(path=config["data_path"],
-                                                 visible_objects=[i],
+                                                 visible_objects=i,
                                                  different_actions=config["different_actions"],
                                                  different_colors=config["different_colors"],
                                                  different_objects=config["different_objects"],
@@ -452,7 +447,6 @@ if __name__ == "__main__":
                                                  num_samples=2000,
                                                  input_length=config["input_length"],
                                                  frame_stride=config["frame_stride"],
-                                                 feature_dim=config["convolutional_features"],
                                                  transform=transform)
 
             # dataloader
