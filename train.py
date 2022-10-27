@@ -154,7 +154,6 @@ def parse_commandline_arguments():
     parser.add_argument("--configuration", default="V1-C6-O9")
     parser.add_argument("--max_frames", type=int, default=16)
     parser.add_argument("--frame_stride", type=int, default=1)
-    parser.add_argument("--same_size", default=True)
     parser.add_argument("--no_joints", default=False)
     parser.add_argument("--num_training_samples", type=int, default=5_000)
     parser.add_argument("--num_validation_samples", type=int, default=2_500)
@@ -195,7 +194,6 @@ def set_config():
         exclusive_colors=len(args.configuration) == 13,
         max_frames=args.max_frames,
         frame_stride=args.frame_stride,
-        same_size=args.same_size == "True",
         no_joints=args.no_joints == "True",
         num_training_samples=min(args.num_training_samples, 5_000),
         num_validation_samples=min(args.num_validation_samples, 2_500),
@@ -256,7 +254,6 @@ def load_datasets():
                                          part="training",
                                          num_samples=config["num_training_samples"],
                                          max_frames=config["max_frames"],
-                                         same_size=config["same_size"],
                                          frame_stride=config["frame_stride"],
                                          precooked=config["precooked"],
                                          feature_dim=config["convolutional_features"],
@@ -271,7 +268,6 @@ def load_datasets():
                                            part="validation",
                                            num_samples=config["num_validation_samples"],
                                            max_frames=config["max_frames"],
-                                           same_size=config["same_size"],
                                            frame_stride=config["frame_stride"],
                                            precooked=config["precooked"],
                                            feature_dim=config["convolutional_features"],
@@ -449,7 +445,6 @@ if __name__ == "__main__":
                                              part="constant-test",
                                              num_samples=2000,
                                              max_frames=config["max_frames"],
-                                             same_size=config["same_size"],
                                              frame_stride=config["frame_stride"],
                                              precooked=config["precooked"],
                                              feature_dim=config["convolutional_features"],
@@ -464,7 +459,6 @@ if __name__ == "__main__":
                                                  part="generalization-test",
                                                  num_samples=2000,
                                                  max_frames=config["max_frames"],
-                                                 same_size=config["same_size"],
                                                  frame_stride=config["frame_stride"],
                                                  precooked=config["precooked"],
                                                  feature_dim=config["convolutional_features"],

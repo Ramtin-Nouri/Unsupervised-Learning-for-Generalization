@@ -7,8 +7,7 @@ from torchvision.io import read_image
 
 class MultimodalSimulation(Dataset):
     def __init__(self, path, part, visible_objects, different_actions, different_colors, different_objects,
-                 exclusive_colors, num_samples, max_frames=16, same_size=True,
-                 frame_stride=1, precooked=False, feature_dim=None, transform=None):
+                 exclusive_colors, num_samples, max_frames=16, frame_stride=1, precooked=False, feature_dim=None, transform=None):
 
         assert isinstance(path, str) and isinstance(part, str)
         assert part in ["training", "validation", "constant-test", "generalization-test"]
@@ -31,7 +30,6 @@ class MultimodalSimulation(Dataset):
         self.different_objects = different_objects
         self.exclusive_colors = exclusive_colors
         self.max_frames = max_frames
-        self.same_size = same_size
         self.frame_stride = frame_stride
         self.num_sub_dirs = len(self.visible_objects)
         self.num_samples_per_dir = min(num_samples // self.num_sub_dirs, max_samples_per_dir)
@@ -93,9 +91,7 @@ class MultimodalSimulation(Dataset):
             frame_numbers = list(range(0, num_frames, self.frame_stride))
 
         num_frames = len(frame_numbers)
-
-        if self.same_size:
-            num_frames = self.max_frames // self.frame_stride
+        num_frames = self.max_frames // self.frame_stride
 
         joints = torch.zeros(num_frames, 6, dtype=torch.float32)
         if self.precooked:
