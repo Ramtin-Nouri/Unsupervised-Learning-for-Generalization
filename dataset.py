@@ -26,6 +26,13 @@ class MultimodalSimulation(Dataset):
         input_length (int): Number of frames to use as input.for the model.
         frame_stride (int): Stride to use when reading in the frames.
         transform (callable, optional): Optional transform to be applied on a sample.
+
+    Attributes:
+        DICTIONARY (list): List of words in the dictionary.
+        CHANNELS (int): Number of channels in the images.
+        HEIGHT (int): Height of the images.
+        WIDTH (int): Width of the images.
+        JOINTS (int): Number of joints in the robot arm.
     """
 
     WIDTH = 398
@@ -65,12 +72,23 @@ class MultimodalSimulation(Dataset):
         self.transform = transform
 
     def __len__(self):
+        """Returns the number of samples in the dataset."""
         return self.num_samples
 
     def __getitem__(self, item):
-        # label: path/Vi-Cc-Oo/part/sequence_xxxx/label.npy -> one-hot-encoded
-        # imgs:  path/Vi-Cc-Oo/part/sequence_xxxx/frame_bbbbbb.png - frame_eeeeee.png
-        # joints:path/Vi-Cc-Oo/part/sequence_xxxx/frame_bbbbbb.txt - frame_eeeeee.txt
+        """Returns a sample from the dataset.
+        One sample consists of the frames, the joints and the label.
+        The frames are padded with the first frame to the input_length.
+        If a stride is given, the input sequences are subsampled.
+        
+        The data is read from the disk on the fly.
+        label: path/Vi-Cc-Oo/part/sequence_xxxx/label.npy -> one-hot-encoded
+        imgs:  path/Vi-Cc-Oo/part/sequence_xxxx/frame_bbbbbb.png - frame_eeeeee.png
+        joints:path/Vi-Cc-Oo/part/sequence_xxxx/frame_bbbbbb.txt - frame_eeeeee.txt
+
+        Args:
+            item (int): Index of the sample to return.
+        """
 
         dir_number = self.visible_objects
         if self.part == "constant-test":
@@ -89,6 +107,25 @@ class MultimodalSimulation(Dataset):
         # glob returns unordered
         joint_paths.sort()
         frame_paths.sort()
+
+
+        # Fix dataset issues
+        # 1. Some sequences are reset after a certain number of frames. 
+        # The frames before the reset need to be excluded.
+        # 2. Some sequences have unrelated "stray" frames after the correct sequence.
+        # The action.info files contain the correct number of frames and the resets.
+        with open(f"{sequence_path}/action.info", "r") as f:
+            action_info = f.read().splitlines()
+            correct_number_frames =int(action_info[0].split("[")[1].split(",")[0])
+            
+            if len(action_info) > 2 and "Resetting" in action_info[2]:
+                last_reset = int(action_info[2].split("[")[1].split("]")[0].split(",")[-1])
+                frame_paths = frame_paths[last_reset:correct_number_frames]
+            else:
+                frame_paths = frame_paths[:correct_number_frames]
+
+
+
 
         num_frames = len(frame_paths)
         assert num_frames > 0
