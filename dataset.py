@@ -7,7 +7,7 @@ from torchvision.io import read_image
 
 class MultimodalSimulation(Dataset):
     def __init__(self, path, part, visible_objects, different_actions, different_colors, different_objects,
-                 exclusive_colors, num_samples, max_frames=16, frame_stride=1, precooked=False, feature_dim=None, transform=None):
+                 exclusive_colors, num_samples, max_frames=16, frame_stride=1, feature_dim=None, transform=None):
 
         assert isinstance(path, str) and isinstance(part, str)
         assert part in ["training", "validation", "constant-test", "generalization-test"]
@@ -35,10 +35,6 @@ class MultimodalSimulation(Dataset):
         self.num_samples_per_dir = min(num_samples // self.num_sub_dirs, max_samples_per_dir)
         self.num_samples = len(self.visible_objects) * self.num_samples_per_dir
         self.transform = transform
-        self.precooked = precooked
-        if precooked:
-            self.feature_dim = feature_dim
-            assert type(feature_dim) == int
         self.LABEL_LENGTH = 19
         self.DICTIONARY = ["put down", "picked up", "pushed left", "pushed right",
                            "apple", "banana", "cup", "football", "book", "pylon", "bottle", "star", "ring",
@@ -67,10 +63,7 @@ class MultimodalSimulation(Dataset):
 
         joint_paths = glob.glob(f"{sequence_path}/joints_*.npy")
 
-        if self.precooked:
-            frame_paths = glob.glob(f"{sequence_path}/resnet18_layer4_features_{self.feature_dim}_frame_*.pt")
-        else:
-            frame_paths = glob.glob(f"{sequence_path}/frame_*.png")
+        frame_paths = glob.glob(f"{sequence_path}/frame_*.png")
 
         # glob returns unordered
         joint_paths.sort()
@@ -90,14 +83,11 @@ class MultimodalSimulation(Dataset):
         else:
             frame_numbers = list(range(0, num_frames, self.frame_stride))
 
-        num_frames = len(frame_numbers)
+        #num_frames = len(frame_numbers)
         num_frames = self.max_frames // self.frame_stride
 
         joints = torch.zeros(num_frames, 6, dtype=torch.float32)
-        if self.precooked:
-            frames = torch.zeros(num_frames, self.feature_dim, dtype=torch.float32)
-        else:
-            frames = torch.zeros(num_frames, 3, 224, 398, dtype=torch.float32)  # img shape (3, 224, 398)
+        frames = torch.zeros(num_frames, 3, 224, 398, dtype=torch.float32)  # img shape (3, 224, 398)
 
         for i, frame_number in enumerate(frame_numbers):
             joint_path = joint_paths[frame_number]
@@ -105,12 +95,9 @@ class MultimodalSimulation(Dataset):
 
             joints[i] = torch.from_numpy(np.load(joint_path)).to(torch.float32)
 
-            if self.precooked:
-                frames[i] = torch.load(frame_path)
-            else:
-                frames[i] = read_image(frame_path).to(torch.float32) / 255
-                if self.transform is not None:
-                    frames[i] = self.transform(frames[i])
+            frames[i] = read_image(frame_path).to(torch.float32) / 255
+            if self.transform is not None:
+                frames[i] = self.transform(frames[i])
 
         # frames.shape -> (frames, 3, 224, 398)
         # joints.shape -> (frames, 6)

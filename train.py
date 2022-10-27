@@ -175,7 +175,6 @@ def parse_commandline_arguments():
     # model architecture
     parser.add_argument("--sequence_architecture", default="lstm_encoder_decoder")
     parser.add_argument("--vision_architecture", default="resnet18")
-    parser.add_argument("--precooked", default=False)
     parser.add_argument("--model_path", default=None)
     parser.add_argument("--saving_path", required=True)
 
@@ -215,7 +214,6 @@ def set_config():
         # model architecture
         sequence_architecture=args.sequence_architecture,
         vision_architecture=args.vision_architecture,
-        precooked=args.precooked == "True",
         model_path=args.model_path,
         git_sha=repo.head.object.hexsha)
 
@@ -234,7 +232,7 @@ def set_config():
         visible_objects += str(visible_obj) + "-"
     slash = "" if args.saving_path[-1] == "/" else "/"
     run_name = f"{config['sequence_architecture']}-{config['vision_architecture']}-" \
-               f"{config['hidden_dim']}-{config['image_features']}-{'precooked-' if config['precooked'] else ''}" \
+               f"{config['hidden_dim']}-{config['image_features']}-" \
                f"V{visible_objects}A{config['different_actions']}-C{config['different_colors']}-" \
                f"O{config['different_objects']}-{'X-' if config['exclusive_colors'] else ''}" \
                f"{'J-' if not config['no_joints'] else ''}{version}"
@@ -255,7 +253,6 @@ def load_datasets():
                                          num_samples=config["num_training_samples"],
                                          max_frames=config["max_frames"],
                                          frame_stride=config["frame_stride"],
-                                         precooked=config["precooked"],
                                          feature_dim=config["convolutional_features"],
                                          transform=transform)
 
@@ -269,7 +266,6 @@ def load_datasets():
                                            num_samples=config["num_validation_samples"],
                                            max_frames=config["max_frames"],
                                            frame_stride=config["frame_stride"],
-                                           precooked=config["precooked"],
                                            feature_dim=config["convolutional_features"],
                                            transform=transform)
 
@@ -292,7 +288,6 @@ def load_model(config):
                                seq2seq_architecture=config["sequence_architecture"],
                                hidden_dim=config["hidden_dim"],
                                freeze=config["freeze"],
-                               precooked=config["precooked"],
                                convolutional_features=config["convolutional_features"],
                                no_joints=config["no_joints"])
     else:
@@ -347,8 +342,6 @@ if __name__ == "__main__":
         transform = torchvision_transform
     else:
         transform = normal_transform
-        if config["precooked"]:
-            raise ValueError("Only pretrained precooks :-)")
 
     train_loader, val_loader = load_datasets()
 
@@ -446,7 +439,6 @@ if __name__ == "__main__":
                                              num_samples=2000,
                                              max_frames=config["max_frames"],
                                              frame_stride=config["frame_stride"],
-                                             precooked=config["precooked"],
                                              feature_dim=config["convolutional_features"],
                                              transform=transform)
 
@@ -460,7 +452,6 @@ if __name__ == "__main__":
                                                  num_samples=2000,
                                                  max_frames=config["max_frames"],
                                                  frame_stride=config["frame_stride"],
-                                                 precooked=config["precooked"],
                                                  feature_dim=config["convolutional_features"],
                                                  transform=transform)
 
