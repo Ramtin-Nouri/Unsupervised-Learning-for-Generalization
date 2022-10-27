@@ -152,7 +152,7 @@ def parse_commandline_arguments():
     # dataset
     parser.add_argument("--data_path", required=True)
     parser.add_argument("--configuration", default="V1-C6-O9")
-    parser.add_argument("--max_frames", type=int, default=16)
+    parser.add_argument("--input_length", type=int, default=16)
     parser.add_argument("--frame_stride", type=int, default=1)
     parser.add_argument("--no_joints", default=False)
     parser.add_argument("--num_training_samples", type=int, default=5_000)
@@ -191,7 +191,7 @@ def set_config():
         different_colors=int(args.configuration[7]),
         different_objects=int(args.configuration[10]),
         exclusive_colors=len(args.configuration) == 13,
-        max_frames=args.max_frames,
+        input_length=args.input_length,
         frame_stride=args.frame_stride,
         no_joints=args.no_joints == "True",
         num_training_samples=min(args.num_training_samples, 5_000),
@@ -251,7 +251,7 @@ def load_datasets():
                                          exclusive_colors=config["exclusive_colors"],
                                          part="training",
                                          num_samples=config["num_training_samples"],
-                                         max_frames=config["max_frames"],
+                                         input_length=config["input_length"],
                                          frame_stride=config["frame_stride"],
                                          feature_dim=config["convolutional_features"],
                                          transform=transform)
@@ -264,7 +264,7 @@ def load_datasets():
                                            exclusive_colors=config["exclusive_colors"],
                                            part="validation",
                                            num_samples=config["num_validation_samples"],
-                                           max_frames=config["max_frames"],
+                                           input_length=config["input_length"],
                                            frame_stride=config["frame_stride"],
                                            feature_dim=config["convolutional_features"],
                                            transform=transform)
@@ -437,7 +437,7 @@ if __name__ == "__main__":
                                              exclusive_colors=config["exclusive_colors"],
                                              part="constant-test",
                                              num_samples=2000,
-                                             max_frames=config["max_frames"],
+                                             input_length=config["input_length"],
                                              frame_stride=config["frame_stride"],
                                              feature_dim=config["convolutional_features"],
                                              transform=transform)
@@ -450,7 +450,7 @@ if __name__ == "__main__":
                                                  exclusive_colors=config["exclusive_colors"],
                                                  part="generalization-test",
                                                  num_samples=2000,
-                                                 max_frames=config["max_frames"],
+                                                 input_length=config["input_length"],
                                                  frame_stride=config["frame_stride"],
                                                  feature_dim=config["convolutional_features"],
                                                  transform=transform)
