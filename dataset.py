@@ -103,7 +103,7 @@ class MultimodalSimulation(Dataset):
         sequence_path = f"{dir_path}/sequence_{item:04d}"
 
         # reading sentence out of label.npy - NOT one-hot-encoded
-        label = torch.from_numpy(np.load(f"{sequence_path}/label.npy")).to(dtype=torch.long)
+        label = torch.from_numpy(np.load(f"{sequence_path}/label.npy")).to(dtype=torch.uint8)
         joint_paths = glob.glob(f"{sequence_path}/joints_*.npy")
         frame_paths = glob.glob(f"{sequence_path}/frame_*.png")
 
@@ -185,9 +185,4 @@ class MultimodalSimulation(Dataset):
         assert label.shape[0] == 3, f"label.shape[0] = {label.shape[0]} != 3"
         assert frames.dtype == torch.float32, f"frames.dtype = {frames.dtype} != torch.float32"
         assert joints.dtype == torch.float32, f"joints.dtype = {joints.dtype} != torch.float32"
-        # assert label.dtype == torch.float32, f"label.dtype = {label.dtype} != torch.float32"
-        # TODO: label is int64 !? -> why?
-        # I didn't change change anything, so it must be the same in the original code
-        # TODO: can we use uint8 instead?
-
-
+        assert label.dtype == torch.uint8, f"label.dtype = {label.dtype} != torch.uint8"
