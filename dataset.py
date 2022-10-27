@@ -44,7 +44,7 @@ class MultimodalSimulation(Dataset):
                            "red", "green", "blue", "yellow", "white", "brown"]
     LABEL_LENGTH = 19
     def __init__(self, path, part, visible_objects, different_actions, different_colors, different_objects,
-                 exclusive_colors, num_samples, input_length=16, frame_stride=1, transform=None):
+                 exclusive_colors, num_samples, input_length=16, frame_stride=1, transform=None, debug=False):
 
         assert isinstance(path, str) and isinstance(part, str)
         assert part in ["training", "validation", "constant-test", "generalization-test"]
@@ -70,9 +70,12 @@ class MultimodalSimulation(Dataset):
         self.frame_stride = frame_stride
         self.num_samples = min(num_samples, max_samples_per_dir)
         self.transform = transform
+        self.debug = debug
 
     def __len__(self):
         """Returns the number of samples in the dataset."""
+        if self.debug:
+            return 20
         return self.num_samples
 
     def __getitem__(self, item):
@@ -160,7 +163,8 @@ class MultimodalSimulation(Dataset):
             frames[i] = frame0
             joints[i] = joint0
 
-        self.assert_output(frames, joints, label) #TODO: add debug mode
+        if self.debug:
+            self.assert_output(frames, joints, label)
         return frames, joints, label
 
 

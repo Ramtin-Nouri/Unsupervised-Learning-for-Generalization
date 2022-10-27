@@ -149,6 +149,7 @@ def set_seeds():
 def parse_commandline_arguments():
     """Parse the commandline arguments"""
     parser = argparse.ArgumentParser(description="Set configuration for training.")
+    parser.add_argument("--debug", default=False, help="Run in debug mode") #TODO: write more about debug mode
     # dataset
     parser.add_argument("--data_path", required=True)
     parser.add_argument("--configuration", default="V1-C6-O9")
@@ -184,6 +185,7 @@ def parse_commandline_arguments():
 def set_config():
     """set training config"""
     config = dict(
+        debug=args.debug == "True",
         # dataset
         data_path=args.data_path,
         visible_objects=int(args.configuration[1]),
@@ -251,7 +253,8 @@ def load_datasets():
                                          num_samples=config["num_training_samples"],
                                          input_length=config["input_length"],
                                          frame_stride=config["frame_stride"],
-                                         transform=transform)
+                                         transform=transform,
+                                         debug=config["debug"])
 
     validation_data = MultimodalSimulation(path=config["data_path"],
                                            visible_objects=config["visible_objects"],
@@ -263,7 +266,8 @@ def load_datasets():
                                            num_samples=config["num_validation_samples"],
                                            input_length=config["input_length"],
                                            frame_stride=config["frame_stride"],
-                                           transform=transform)
+                                           transform=transform,
+                                           debug=config["debug"])
 
     # dataloader
     train_loader = DataLoader(dataset=training_data, batch_size=config["batch_size"], shuffle=True,
@@ -435,7 +439,8 @@ if __name__ == "__main__":
                                              num_samples=2000,
                                              input_length=config["input_length"],
                                              frame_stride=config["frame_stride"],
-                                             transform=transform)
+                                             transform=transform,
+                                             debug=config["debug"])
 
             gen_test_data = MultimodalSimulation(path=config["data_path"],
                                                  visible_objects=i,
@@ -447,7 +452,8 @@ if __name__ == "__main__":
                                                  num_samples=2000,
                                                  input_length=config["input_length"],
                                                  frame_stride=config["frame_stride"],
-                                                 transform=transform)
+                                                 transform=transform,
+                                                 debug=config["debug"])
 
             # dataloader
             test_loader = DataLoader(dataset=test_data, batch_size=config["batch_size"], shuffle=False,
