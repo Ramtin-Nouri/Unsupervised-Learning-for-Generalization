@@ -14,7 +14,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 from dataset import MultimodalSimulation
-from meta_models import EncoderDecoder
+from models.meta_models import EncoderDecoder
 from evaluation import get_evaluation, get_relative_confusion_matrix, create_confusion_matrix_plt
 from helper import *
 

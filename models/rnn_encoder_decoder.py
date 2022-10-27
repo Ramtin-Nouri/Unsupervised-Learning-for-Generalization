@@ -4,6 +4,8 @@ import torch.nn as nn
 
 
 class LstmEncoder(nn.Module):
+    """ Encoder of the LSTM model. """
+
     def __init__(self, input_size, hidden_size, num_layers=1):
         super(LstmEncoder, self).__init__()
         self.input_size = input_size
@@ -27,6 +29,7 @@ class LstmEncoder(nn.Module):
 
 
 class LstmDecoder(nn.Module):
+    """ Decoder of the LSTM model. """
     def __init__(self, input_size, hidden_size, num_layers=1, dropout=0.0):
         super().__init__()
         self.input_size = input_size
