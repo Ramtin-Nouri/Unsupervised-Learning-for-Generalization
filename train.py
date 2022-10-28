@@ -1,5 +1,6 @@
 import argparse
 from mimetypes import init
+from pydoc import ModuleScanner
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 from datetime import datetime
@@ -103,14 +104,26 @@ def main(args):
     )
     wandb_logger.watch(model, log="all")
 
+    modelCheckpoint = pl.callbacks.ModelCheckpoint(
+        dirpath=config["output_dir"],
+        save_top_k=1,
+        verbose=True,
+        monitor="val_loss",
+        mode="min",
+        filename='{epoch}-{val_loss:.2f}'
+    )
+
     trainer = pl.Trainer(
         gpus=config["gpus"],
         max_epochs=config["epochs"],
         logger=wandb_logger,
+        callbacks=[modelCheckpoint],
         log_every_n_steps=1,
         check_val_every_n_epoch=1
     )
     trainer.fit(model, datamodule=datamodule)
+
+    #TODO: test and create confusion matrix
 
 if __name__ == "__main__":
     args = parse_args()

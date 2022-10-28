@@ -5,6 +5,7 @@ from collections import OrderedDict
 from models.rnn_encoder_decoder import LstmEncoder, LstmDecoder
 from models.torchvision_models import ResNet18
 from pytorch_lightning import LightningModule
+from helper import *
 
 
 class EncoderDecoder(LightningModule):
@@ -106,6 +107,7 @@ class EncoderDecoder(LightningModule):
         self.log('train_acc_object', epoch_object_acc, on_step=False, on_epoch=True)
         self.log('train_acc', epoch_acc, on_step=False, on_epoch=True)
         self.reset_metrics_train()
+        print_with_time(f"Epoch {self.current_epoch} train acc: {epoch_acc}")
     
     def validation_step(self, batch, batch_idx):
         frames, joints, labels = batch
@@ -125,6 +127,7 @@ class EncoderDecoder(LightningModule):
         self.log('val_acc_object', epoch_object_acc, on_step=False, on_epoch=True)
         self.log('val_acc', epoch_acc, on_step=False, on_epoch=True)
         self.reset_metrics_val()
+        print_with_time(f"Epoch {self.current_epoch} val_acc: {epoch_acc}")
 
     def calculate_accuracy(self, output, labels, train=True):
         _, action_output_batch = torch.max(output[:, 0, :], dim=1)
