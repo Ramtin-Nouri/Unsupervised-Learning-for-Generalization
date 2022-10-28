@@ -14,6 +14,7 @@ class EncoderDecoder(LightningModule):
             image_features=256, hidden_dim=512, freeze=False, convolutional_features=1024,
             no_joints=False, dropout3=0.0):"""
         super().__init__()
+        self.save_hyperparameters()
 
         LABEL_SIZE = 19
         self.use_joints = config["use_joints"]
