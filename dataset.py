@@ -1,9 +1,10 @@
 import glob
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from torchvision.io import read_image
-
+from pytorch_lightning import LightningDataModule
+from torchvision import transforms
 
 class MultimodalSimulation(Dataset):
     """PyTorch Dataset Implementation.
@@ -186,3 +187,67 @@ class MultimodalSimulation(Dataset):
         assert frames.dtype == torch.float32, f"frames.dtype = {frames.dtype} != torch.float32"
         assert joints.dtype == torch.float32, f"joints.dtype = {joints.dtype} != torch.float32"
         assert label.dtype == torch.uint8, f"label.dtype = {label.dtype} != torch.uint8"
+
+class DataModule(LightningDataModule):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        
+        # TODO: validate mean and std
+        dataset_mean = [0.7605, 0.7042, 0.6045]
+        dataset_std = [0.1832, 0.2083, 0.2902]
+
+        torchvision_mean = [0.485, 0.456, 0.406]
+        torchvision_std = [0.229, 0.224, 0.225]
+
+        normal_transform = transforms.Normalize(mean=dataset_mean, std=dataset_std)
+        torchvision_transform = transforms.Normalize(mean=torchvision_mean, std=torchvision_std)
+
+        if config["pretrained"]:
+            self.transform = torchvision_transform
+        else:
+            self.transform = normal_transform
+        self.train_loader = None
+        self.val_loader = None
+
+    def prepare_data(self):
+        pass
+
+    def setup(self, stage=None):
+        training_data = MultimodalSimulation(path=self.config["data_path"],
+                                            visible_objects=self.config["visible_objects"],
+                                            different_actions=self.config["different_actions"],
+                                            different_colors=self.config["different_colors"],
+                                            different_objects=self.config["different_objects"],
+                                            exclusive_colors=self.config["exclusive_colors"],
+                                            part="training",
+                                            num_samples=self.config["num_training_samples"],
+                                            input_length=self.config["input_length"],
+                                            frame_stride=self.config["input_stride"],
+                                            transform=self.transform,
+                                            debug=self.config["debug"])
+
+        validation_data = MultimodalSimulation(path=self.config["data_path"],
+                                            visible_objects=self.config["visible_objects"],
+                                            different_actions=self.config["different_actions"],
+                                            different_colors=self.config["different_colors"],
+                                            different_objects=self.config["different_objects"],
+                                            exclusive_colors=self.config["exclusive_colors"],
+                                            part="validation",
+                                            num_samples=self.config["num_validation_samples"],
+                                            input_length=self.config["input_length"],
+                                            frame_stride=self.config["input_stride"],
+                                            transform=self.transform,
+                                            debug=self.config["debug"])
+
+        # dataloader
+        self.train_loader = DataLoader(dataset=training_data, batch_size=self.config["batch_size"], shuffle=True,
+                                num_workers=self.config["num_workers"])
+        self.val_loader = DataLoader(dataset=validation_data, batch_size=self.config["batch_size"], shuffle=False,
+                                num_workers=self.config["num_workers"])
+
+    def train_dataloader(self):
+        return self.train_loader
+
+    def val_dataloader(self):
+        return self.val_loader

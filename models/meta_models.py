@@ -3,46 +3,38 @@ from torch import nn
 from einops import rearrange
 from collections import OrderedDict
 from models.rnn_encoder_decoder import LstmEncoder, LstmDecoder
-from models.torchvision_models import ResNet34, ResNet50, ResNet101, ResNet18, EisermannVGG
+from models.torchvision_models import ResNet18
+from pytorch_lightning import LightningModule
 
 
-class EncoderDecoder(nn.Module):
-    def __init__(self, vision_architecture, pretrained_vision, seq2seq_architecture, dropout1=0.0, dropout2=0.0,
-                 image_features=256, hidden_dim=512, freeze=False, convolutional_features=1024,
-                 no_joints=False, dropout3=0.0):
+class EncoderDecoder(LightningModule):
+    def __init__(self, config):
+        """vision_architecture, pretrained_vision, seq2seq_architecture, dropout1=0.0, dropout2=0.0,
+            image_features=256, hidden_dim=512, freeze=False, convolutional_features=1024,
+            no_joints=False, dropout3=0.0):"""
         super().__init__()
 
         LABEL_SIZE = 19
-        JOINTS_SIZE = 0 if no_joints else 6
-        self.no_joints = no_joints
+        self.use_joints = config["use_joints"]
+        JOINTS_SIZE = 6 if self.use_joints else 0
 
-        if vision_architecture == "resnet18":
-            self.vision_model = ResNet18(pretrained=pretrained_vision,
-                                            convolutional_features=convolutional_features, out_features=image_features,
-                                            dropout1=dropout1, dropout2=dropout2, freeze=freeze)
-        elif vision_architecture == "resnet34":
-            self.vision_model = ResNet34(pretrained=pretrained_vision,
-                                            convolutional_features=convolutional_features, out_features=image_features,
-                                            dropout1=dropout1, dropout2=dropout2, freeze=freeze)
-        elif vision_architecture == "resnet50":
-            self.vision_model = ResNet50(pretrained=pretrained_vision,
-                                            convolutional_features=convolutional_features, out_features=image_features,
-                                            dropout1=dropout1, dropout2=dropout2, freeze=freeze)
-        elif vision_architecture == "resnet101":
-            self.vision_model = ResNet101(pretrained=pretrained_vision,
-                                            convolutional_features=convolutional_features,
-                                            out_features=image_features,
-                                            dropout1=dropout1, dropout2=dropout2, freeze=freeze)
-        elif vision_architecture == "eisermann_vgg":
-            self.vision_model = EisermannVGG(out_features=image_features, dropout2=dropout2, freeze=freeze)
-        else:
-            raise ValueError("Wrong vision model!")
+        # TODO: hardcode because will be replaced anyway:
+        convolutional_features = 1024
+        image_features = 256
+        dropout1 = 0.0
+        dropout2 = 0.0
+        dropout3 = 0.0
+        hidden_dim = 512
+        freeze = False
 
-        if seq2seq_architecture == "lstm_encoder_decoder":
-            self.encoder = LstmEncoder(input_size=image_features + JOINTS_SIZE, hidden_size=hidden_dim)
-            self.decoder = LstmDecoder(input_size=LABEL_SIZE, hidden_size=hidden_dim, dropout=dropout3)
-        else:
-            raise ValueError("Wrong seq2seq model!")
+        self.vision_model = ResNet18(pretrained=config["pretrained"],
+                                        convolutional_features=convolutional_features, out_features=image_features,
+                                        dropout1=dropout1, dropout2=dropout2, freeze=freeze)
+
+        self.encoder = LstmEncoder(input_size=image_features + JOINTS_SIZE, hidden_size=hidden_dim)
+        self.decoder = LstmDecoder(input_size=LABEL_SIZE, hidden_size=hidden_dim, dropout=dropout3)
+
+        self.loss_fn = nn.CrossEntropyLoss()
 
     def forward(self, frames, joints):
         # input:
@@ -65,10 +57,10 @@ class EncoderDecoder(nn.Module):
 
         frames_features = rearrange(frames_features, '(N L) f -> N L f', N=N, L=L)
 
-        if self.no_joints:
-            sequence_input = frames_features  # shape : (N, L, f)
-        else:
+        if self.use_joints:
             sequence_input = torch.cat((frames_features, joints), dim=2)  # shape : (N, L, f+j)
+        else:
+            sequence_input = frames_features  # shape : (N, L, f)
 
         lstm_out, hidden = self.encoder(sequence_input)
 
@@ -82,3 +74,29 @@ class EncoderDecoder(nn.Module):
             decoder_input = decoder_output
 
         return output
+
+    def configure_optimizers(self):
+        # TODO: dont hardcode
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        return optimizer
+    
+    def loss(self, output, labels):
+        loss = self.loss_fn(output[:, 0, :], labels[:, 0])
+        loss += self.loss_fn(output[:, 1, :], labels[:, 1])
+        loss += self.loss_fn(output[:, 2, :], labels[:, 2])
+        return loss
+
+    def training_step(self, batch, batch_idx):
+        frames, joints, labels = batch
+        output = self(frames, joints)
+        loss = self.loss(output, labels)
+        self.log('train_loss', loss)
+        return loss
+    
+    def validation_step(self, batch, batch_idx):
+        frames, joints, labels = batch
+        output = self(frames, joints)
+        loss = self.loss(output, labels)
+        self.log('val_loss', loss)
+        return loss
+
