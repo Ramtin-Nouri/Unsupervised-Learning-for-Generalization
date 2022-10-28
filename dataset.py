@@ -176,7 +176,6 @@ class MultimodalSimulation(Dataset):
         # frames.shape -> (frames, 3, 224, 398)
         # joints.shape -> (frames, 6)
         # label.shape  -> (3) : word tokens
-        # all have dtype=torch.float32
         assert frames.shape[0] == self.input_length , f"frames.shape[0] = {frames.shape[0]} != {self.input_length}"
         assert joints.shape[0] == self.input_length, f"joints.shape[0] = {joints.shape[0]} != {self.input_length}"
         assert frames.shape[1] == self.CHANNELS , f"frames.shape[1] = {frames.shape[1]} != 3"

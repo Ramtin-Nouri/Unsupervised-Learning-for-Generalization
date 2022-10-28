@@ -87,7 +87,7 @@ def load_config(config_path, debug=False):
     return config
 
 def main(args):
-    pl.seed_everything(42) # for reproducibility
+    pl.seed_everything(42, workers=True) # for reproducibility
     config = load_config(args.config, args.debug)
     print("Config:", config)
 
@@ -103,12 +103,12 @@ def main(args):
     )
     wandb_logger.watch(model, log="all")
 
-    # TODO: add debug mode
     trainer = pl.Trainer(
         gpus=config["gpus"],
         max_epochs=config["epochs"],
         logger=wandb_logger,
-        log_every_n_steps=1
+        log_every_n_steps=1,
+        check_val_every_n_epoch=1
     )
     trainer.fit(model, datamodule=datamodule)
 

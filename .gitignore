@@ -133,3 +133,4 @@ personal_data.json
 ignore/
 wandb/
 output/
+dataset/
