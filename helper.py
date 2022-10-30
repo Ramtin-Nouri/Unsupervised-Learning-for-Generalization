@@ -1,4 +1,5 @@
 """All sort of helper functions for the project."""
+from datetime import datetime
 
 # PRINT IN TERMINAL WITH COLOR ------------------------------------------------
 terminal_colors = {"purple": '\033[95m', "blue": '\033[94m',"cyan": '\033[96m',
@@ -16,5 +17,8 @@ def print_warning(text):
 def print_fail(text):
     """Prints text in fail color."""
     print_color(text, "fail")
+
+def print_with_time(string):
+    print(f"{datetime.now().strftime('%d-%m-%Y %H:%M:%S')} : {str(string)}\n")
 # ------------------------------------------------------------------------------
 

@@ -1,9 +1,10 @@
 # many-to-many seq2seq problem: varying number of frames to (varying/ different) number of words.
 import torch
 import torch.nn as nn
+from pytorch_lightning import LightningModule
 
 
-class LstmEncoder(nn.Module):
+class LstmEncoder(LightningModule):
     """ Encoder of the LSTM model. """
 
     def __init__(self, input_size, hidden_size, num_layers=1):
@@ -28,7 +29,7 @@ class LstmEncoder(nn.Module):
                 torch.zeros(self.num_layers, batch_size, self.hidden_size))
 
 
-class LstmDecoder(nn.Module):
+class LstmDecoder(LightningModule):
     """ Decoder of the LSTM model. """
     def __init__(self, input_size, hidden_size, num_layers=1, dropout=0.0):
         super().__init__()
