@@ -1,6 +1,7 @@
 {
     "gpus": 1,
     "epochs": 10,
+    "unsupervised_epochs": 100,
     "batch_size": 8,
     "num_workers": 1,
     "input_length": 16,
@@ -8,9 +9,14 @@
     "use_joints": true,
     "output_dir": "output",
     "learning_rate": 0.001,
-    "pretrained": true,
+    "convolution_layers_encoder":[3,512,256,124,64,32,3],
+    "convolution_layers_decoder":[3,32,64,124,256,3],
+    "lstm_num_layers": 2,
+    "lstm_hidden_size": 256,
     "dataset":{
         "data_path": "dataset/",
+        "width": 398,
+        "height": 224,
         "num_training_samples": 5000,
         "num_validation_samples": 2500,
         "visible_objects": 1,

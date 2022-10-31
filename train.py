@@ -9,7 +9,8 @@ from datetime import datetime
 import json
 import os
 import dataset
-from models.meta_models import EncoderDecoder
+from models.classifier_model import LstmClassifier
+from models.lstm_autoencoder import LstmAutoencoder
 from helper import *
 from evaluation import *
 
@@ -35,6 +36,7 @@ def load_config(config_path, debug=False):
     config = dict(
         gpus=config_file.get("gpus", default["gpus"]),
         epochs=config_file.get("epochs", default["epochs"]),
+        unsupervised_epochs=config_file.get("unsupervised_epochs", default["unsupervised_epochs"]),
         batch_size=config_file.get("batch_size", default["batch_size"]),
         num_workers=config_file.get("num_workers", default["num_workers"]),
         input_length=config_file.get("input_length", default["input_length"]),
@@ -42,10 +44,15 @@ def load_config(config_path, debug=False):
         use_joints=config_file.get("use_joints", default["use_joints"]),
         output_dir=config_file.get("output_dir", default["output_dir"]),
         learning_rate=config_file.get("learning_rate", default["learning_rate"]),
-        pretrained = config_file.get("pretrained", default["pretrained"]),
+        convolution_layers_encoder=config_file.get("convolution_layers_encoder", default["convolution_layers_encoder"]),
+        convolution_layers_decoder=config_file.get("convolution_layers_decoder", default["convolution_layers_decoder"]),
+        lstm_num_layers=config_file.get("lstm_num_layers", default["lstm_num_layers"]),
+        lstm_hidden_size=config_file.get("lstm_hidden_size", default["lstm_hidden_size"]),
     )
     # dataset related configs
     dataset = config_file.get("dataset", default["dataset"])
+    config["width"] = dataset.get("width", default["dataset"]["width"])
+    config["height"] = dataset.get("height", default["dataset"]["height"])
     config["data_path"] = dataset.get("data_path", default["dataset"]["data_path"])
     config["num_training_samples"] = dataset.get("num_training_samples", default["dataset"]["num_training_samples"])
     config["num_validation_samples"] = dataset.get("num_validation_samples", default["dataset"]["num_validation_samples"])
@@ -97,18 +104,45 @@ def main(args):
     config = load_config(args.config, args.debug)
     print("Config:", config)
 
-    datamodule = dataset.DataModule(config)
-
-    model = EncoderDecoder(config)
-    
     wandb_logger = WandbLogger(
         project=config["wandb_project"],
         name=config["run_name"],
         save_dir=config["output_dir"],
         anonymous="allow",
     )
-    wandb_logger.watch(model, log="all")
+    wandb_logger.experiment.config.update(config)
 
+    # First Train Unsupervised model
+    unsupervised_datamodule = dataset.DataModule(config, True)
+    unsupervised_model = LstmAutoencoder(config)
+    wandb_logger.watch(unsupervised_model, log="all")
+
+    unsupervised_checkpt = pl.callbacks.ModelCheckpoint(
+        dirpath=config["model_path"],
+        save_top_k=1,
+        verbose=True,
+        monitor="val_loss",
+        mode="min",
+        filename='unsupervised_{epoch}-{val_loss:.2f}'
+    )
+
+    unsupervised_trainer = pl.Trainer(
+        gpus=config["gpus"],
+        max_epochs=config["unsupervised_epochs"],
+        logger=wandb_logger,
+        callbacks=[unsupervised_checkpt],
+        log_every_n_steps=1,
+        check_val_every_n_epoch=1
+    )
+    unsupervised_trainer.fit(unsupervised_model, datamodule=unsupervised_datamodule)
+    #TODO add test and log to wandb
+
+    # Use the trained model to get the latent space, dismiss its decoder
+    # TODO: acually use pretrained weights
+    datamodule = dataset.DataModule(config)
+    model = LSTMClassifier(config)
+    wandb_logger.watch(model, log="all")
+    
     modelCheckpoint = pl.callbacks.ModelCheckpoint(
         dirpath=config["model_path"],
         save_top_k=1,
@@ -126,8 +160,6 @@ def main(args):
         log_every_n_steps=1,
         check_val_every_n_epoch=1
     )
-
-    wandb_logger.experiment.config.update(config)
 
     trainer.fit(model, datamodule=datamodule)
 

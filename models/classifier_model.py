@@ -2,13 +2,35 @@ import torch
 from torch import nn
 from einops import rearrange
 from collections import OrderedDict
-from models.rnn_encoder_decoder import LstmEncoder, LstmDecoder
-from models.torchvision_models import ResNet18
+from models.lstm_autoencoder import LstmEncoder
 from pytorch_lightning import LightningModule
 from helper import *
 
 
-class EncoderDecoder(LightningModule):
+class ClassificationLstmDecoder(LightningModule):
+    """ Decoder of the LSTM model for classification. """
+    def __init__(self, input_size, hidden_size, num_layers=1, dropout=0.0):
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+
+        self.hidden = None
+        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size,
+                            num_layers=num_layers, batch_first=True)
+        self.dropout = nn.Dropout(p=dropout, inplace=False)
+        self.linear = nn.Linear(hidden_size, input_size)  # can be replaced with proj size in LSTM
+
+    def forward(self, x_input, encoder_hidden_states):
+        lstm_out, self.hidden = self.lstm(x_input.unsqueeze(1), encoder_hidden_states)
+        # lstm_out.shape    : (N, 1, hidden_size)
+        output = self.linear(self.dropout(lstm_out.squeeze(1)))
+
+        # output.shape : (N, 1, input_size)
+        # self.hidden.shape : (1, N, hidden_size)
+        return output, self.hidden
+
+class LstmClassifier(LightningModule):
     def __init__(self, config):
         """vision_architecture, pretrained_vision, seq2seq_architecture, dropout1=0.0, dropout2=0.0,
             image_features=256, hidden_dim=512, freeze=False, convolutional_features=1024,
@@ -22,20 +44,12 @@ class EncoderDecoder(LightningModule):
 
         self.learning_rate = config["learning_rate"]
         # TODO: hardcode because will be replaced anyway:
-        convolutional_features = 1024
         image_features = 256
-        dropout1 = 0.0
-        dropout2 = 0.0
-        dropout3 = 0.0
+        dropout = 0.0
         hidden_dim = 512
-        freeze = False
-
-        self.vision_model = ResNet18(pretrained=config["pretrained"],
-                                        convolutional_features=convolutional_features, out_features=image_features,
-                                        dropout1=dropout1, dropout2=dropout2, freeze=freeze)
 
         self.encoder = LstmEncoder(input_size=image_features + JOINTS_SIZE, hidden_size=hidden_dim)
-        self.decoder = LstmDecoder(input_size=LABEL_SIZE, hidden_size=hidden_dim, dropout=dropout3)
+        self.decoder = ClassificationLstmDecoder(input_size=LABEL_SIZE, hidden_size=hidden_dim, dropout=dropout)
 
         self.loss_fn = nn.CrossEntropyLoss()
         self.reset_metrics_train()
@@ -44,7 +58,6 @@ class EncoderDecoder(LightningModule):
     def forward(self, frames, joints):
         # input:
         # images shape : (N, L, 3, 224, 398)
-        #   if precooked -> (N, L, conv_features)
         # joints shape : (N, L, 6)
         #
         # ouput:
