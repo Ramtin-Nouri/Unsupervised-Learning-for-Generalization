@@ -5,6 +5,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 from torchvision import transforms
 from torch.utils.data import DataLoader
+from torchinfo import summary
 from datetime import datetime
 import json
 import os
@@ -115,6 +116,8 @@ def main(args):
     # First Train Unsupervised model
     unsupervised_datamodule = dataset.DataModule(config, True)
     unsupervised_model = LstmAutoencoder(config)
+    print("Unsupervised model:", unsupervised_model)
+    summary(unsupervised_model, input_size=(config["batch_size"], config["input_length"], 3, config["height"], config["width"]))
     wandb_logger.watch(unsupervised_model, log="all")
 
     unsupervised_checkpt = pl.callbacks.ModelCheckpoint(
@@ -140,7 +143,8 @@ def main(args):
     # Use the trained model to get the latent space, dismiss its decoder
     # TODO: acually use pretrained weights
     datamodule = dataset.DataModule(config)
-    model = LSTMClassifier(config)
+    model = LstmClassifier(config)
+    summary(model, input_size=(config["batch_size"], config["input_length"], 3, config["height"], config["width"]))
     wandb_logger.watch(model, log="all")
     
     modelCheckpoint = pl.callbacks.ModelCheckpoint(

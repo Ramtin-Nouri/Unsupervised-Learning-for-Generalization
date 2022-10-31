@@ -29,33 +29,33 @@ class LstmEncoder(LightningModule):
         # Add convolutional layers
         layer_list = []
         for i in range(len(conv_features) - 1):
-            layer_list.append(nn.Conv2d(conv_features[i], conv_features[i + 1], kernel_size=3, stride=1, padding=0))
+            layer_list.append(nn.Conv2d(conv_features[i], conv_features[i + 1], kernel_size=3, stride=1, padding=1))
             layer_list.append(nn.ReLU())
             layer_list.append(nn.MaxPool2d(kernel_size=2, stride=2, padding=0))
-        layer_list.append(nn.Flatten())
+        
+        layer_list.append(nn.Flatten(start_dim=1))
         self.conv_layers = nn.Sequential(*layer_list)
         
-        self.hidden = None
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size,
                             num_layers=num_layers, batch_first=True)
 
-    def forward(self, x_input):
-        # x_input.shape : (N, L, 3, 224, 398)
-        # self.hidden.shape : (1, N, hidden_size)
-        # output.shape : (N, L, hidden_size)
+    def forward(self, x_input, hidden):
+        # x_input.shape : (L, 3, 224, 398)
+        # self.hidden.shape : (num_layers, N, hidden_size)
+        # output.shape : (L, hidden_size)
 
         # Extract features from the input image
         x_input = self.conv_layers(x_input)
-        # x_input.shape : (N, L, conv_features[-1])
-
+        # x_input.shape : (L, conv_features[-1])
+        x_input = rearrange(x_input, 'L C -> L 1 C')
         # Feed the features to the LSTM
-        output, self.hidden = self.lstm(x_input, self.hidden)
-        return output, self.hidden
+        output, hidden = self.lstm(x_input, hidden)
+        return output, hidden
 
-    def init_hidden(self, batch_size):
+    def init_hidden(self, batch_size, device):
         # Initialize the hidden state of the LSTM
-        self.hidden =  (torch.zeros(self.num_layers, batch_size, self.hidden_size),
-                torch.zeros(self.num_layers, batch_size, self.hidden_size))
+        return  (torch.zeros((self.num_layers, batch_size, self.hidden_size), device=device),
+                torch.zeros((self.num_layers, batch_size, self.hidden_size), device=device))
 
 
 class CnnDecoder(LightningModule):
@@ -72,24 +72,29 @@ class CnnDecoder(LightningModule):
         torch.Tensor: Predicted image.
     """
 
-    def __init__(self, conv_features):
+    def __init__(self, conv_features, input_shape, output_shape):
         super().__init__()
-        # Add convolutional layers
-        conv_features = conv_features
+        # Build the layer list backwards then reverse it (to know the exact shapes)
         layer_list = []
-        for i in range(len(conv_features) - 1):
-            layer_list.append(nn.Conv2d(conv_features[i], conv_features[i + 1], kernel_size=3, stride=1, padding=0))
+        current_shape = output_shape
+        for i in range(len(conv_features) - 2,-1,-1):
+            layer_list.append(nn.Upsample(size=current_shape, mode='bilinear'))
             layer_list.append(nn.ReLU())
-            layer_list.append(nn.Upsample(scale_factor=2))
-        layer_list.append(nn.Conv2d(conv_features[-1], 3, kernel_size=3, stride=1, padding=0))
+            layer_list.append(nn.Conv2d(conv_features[i], conv_features[i + 1], kernel_size=3, stride=1, padding=1))
+            current_shape = (current_shape[0] // 2, current_shape[1] // 2)
+        layer_list.append(nn.Unflatten(dim=-1, unflattened_size=(current_shape)))
+        layer_list.append(nn.Sigmoid())
+        layer_list.append(nn.Linear(input_shape, np.prod(current_shape)))
+        layer_list.reverse()
+
+        layer_list.append(nn.Conv2d(conv_features[-1], 3, kernel_size=3, stride=1, padding=1))
         layer_list.append(nn.Sigmoid())
         self.conv_layers = nn.Sequential(*layer_list)
 
     def forward(self, x_input):
-        # x_input.shape : (N, L, hidden_size)
+        # x_input.shape : (N, 1, hidden_size)
         # output.shape : (N, L, 3, 224, 398)
 
-        # Feed the LSTM output to the CNN
         output = self.conv_layers(x_input)
         return output
 
@@ -115,31 +120,22 @@ class LstmAutoencoder(LightningModule):
 
         lstm_in = self.calculate_lstm_input_size()
         self.encoder = LstmEncoder(config["convolution_layers_encoder"], lstm_in, config["lstm_hidden_size"], config["lstm_num_layers"])
-        self.decoder = CnnDecoder(config["convolution_layers_decoder"])
+        self.decoder = CnnDecoder(config["convolution_layers_decoder"], config["lstm_hidden_size"],(config["height"], config["width"]))
 
     def forward(self, x_input):
         # x_input.shape : (N, L, 3, 224, 398)
         # output.shape : (N, L, 3, 224, 398)
 
-        # Feed the input to the encoder
-        self.encoder.init_hidden(x_input.shape[0]) #init hidden state
+        hidden = self.encoder.init_hidden(x_input.shape[0],device = x_input.device) #init hidden state
 
-        frames = rearrange(x_input, 'n l c h w -> (n l) c h w')
-        frames = self.encoder.conv_layers(frames)
-        frames = rearrange(frames, '(n l) c h w -> n l c h w', l=x_input.shape[1])
-        output, _ = self.encoder.lstm(frames, self.encoder.hidden)
-
-        # Feed the output of the encoder to the decoder
-        output = self.decoder(output)
-        return output
-
-        for i in range(x_input.shape[1]):
-            output, _ = self.encoder(x_input[:, i, :, :, :])
-        # output.shape : (N, L, hidden_size)
+        x_input = rearrange(x_input, 'n l c h w -> l n c h w')
+        for i in range(x_input.shape[0]):
+            output_encoder, hidden = self.encoder(x_input[i], hidden)
+        # output.shape : (N, hidden_size)
 
         # Feed the LSTM output to the decoder
-        output = self.decoder(x_input)
-        return output
+        output_decoder = self.decoder(output_encoder)
+        return output_decoder
 
     def training_step(self, batch, batch_idx):
         x, _, y, _ = batch #TODO: INCORPARATE JOINTS
