@@ -68,6 +68,7 @@ def load_config(config_path, debug=False):
         config["num_training_samples"] = 20
         config["num_validation_samples"] = 20
         config["epochs"] = 1
+        config["unsupervised_epochs"] = 1
     config["debug"] = debug
     os.makedirs(config["output_dir"], exist_ok=True)
 
