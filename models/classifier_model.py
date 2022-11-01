@@ -31,10 +31,13 @@ class ClassificationLstmDecoder(LightningModule):
         return output, self.hidden
 
 class LstmClassifier(LightningModule):
-    def __init__(self, config):
-        """vision_architecture, pretrained_vision, seq2seq_architecture, dropout1=0.0, dropout2=0.0,
-            image_features=256, hidden_dim=512, freeze=False, convolutional_features=1024,
-            no_joints=False, dropout3=0.0):"""
+    """ LSTM model for classification. 
+
+    Args:
+        config (dict): Dictionary containing the configuration parameters.
+        encoder (LstmEncoder): Trained encoder part of the LstmAutoencoder model.
+    """
+    def __init__(self, config, encoder):
         super().__init__()
         self.save_hyperparameters()
 
@@ -44,11 +47,10 @@ class LstmClassifier(LightningModule):
 
         self.learning_rate = config["learning_rate"]
         # TODO: hardcode because will be replaced anyway:
-        image_features = 256
         dropout = 0.0
         hidden_dim = 512
 
-        self.encoder = LstmEncoder(input_size=image_features + JOINTS_SIZE, hidden_size=hidden_dim)
+        self.encoder = encoder
         self.decoder = ClassificationLstmDecoder(input_size=LABEL_SIZE, hidden_size=hidden_dim, dropout=dropout)
 
         self.loss_fn = nn.CrossEntropyLoss()

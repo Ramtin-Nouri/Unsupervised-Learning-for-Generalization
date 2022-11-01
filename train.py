@@ -100,20 +100,16 @@ def load_config(config_path, debug=False):
     
     return config
 
-def main(args):
-    pl.seed_everything(42, workers=True) # for reproducibility
-    config = load_config(args.config, args.debug)
-    print("Config:", config)
+def train_unsupervised(config, wandb_logger):
+    """Train the unsupervised model.
 
-    wandb_logger = WandbLogger(
-        project=config["wandb_project"],
-        name=config["run_name"],
-        save_dir=config["output_dir"],
-        anonymous="allow",
-    )
-    wandb_logger.experiment.config.update(config)
+    Args:
+        config (dict): Configuration dictionary.
+        wandb_logger (WandbLogger): WandB logger.
 
-    # First Train Unsupervised model
+    Returns:
+        LstmAutoencoder: Trained unsupervised model.
+    """
     unsupervised_datamodule = dataset.DataModule(config, True)
     unsupervised_model = LstmAutoencoder(config)
     print("Unsupervised model:", unsupervised_model)
@@ -139,42 +135,62 @@ def main(args):
     )
     unsupervised_trainer.fit(unsupervised_model, datamodule=unsupervised_datamodule)
     #TODO add test and log to wandb
+    best = unsupervised_model.load_from_checkpoint(unsupervised_checkpt.best_model_path)
+    return best
 
-    # Use the trained model to get the latent space, dismiss its decoder
-    # TODO: acually use pretrained weights
-    datamodule = dataset.DataModule(config)
-    model = LstmClassifier(config)
-    summary(model, input_size=(config["batch_size"], config["input_length"], 3, config["height"], config["width"]))
-    wandb_logger.watch(model, log="all")
-    
-    modelCheckpoint = pl.callbacks.ModelCheckpoint(
+def train_supervised(config, wandb_logger, unsupervised_model):
+    """Train the supervised model.
+
+    Args:
+        config (dict): Configuration dictionary.
+        wandb_logger (WandbLogger): WandB logger.
+        unsupervised_model (LstmAutoencoder): Trained unsupervised model.
+
+    Returns:
+        LstmAutoencoder: Trained supervised model.
+        datamodule (DataModule): Supervised datamodule.
+    """
+    supervised_datamodule = dataset.DataModule(config, False)
+    supervised_model = LstmClassifier(config, unsupervised_model)
+    print("Supervised model:", supervised_model)
+    summary(supervised_model, input_size=(config["batch_size"], config["input_length"], 3, config["height"], config["width"]))
+    wandb_logger.watch(supervised_model, log="all")
+
+    supervised_checkpt = pl.callbacks.ModelCheckpoint(
         dirpath=config["model_path"],
         save_top_k=1,
         verbose=True,
         monitor="val_loss",
         mode="min",
-        filename='{epoch}-{val_loss:.2f}'
+        filename='supervised_{epoch}-{val_loss:.2f}'
     )
 
-    trainer = pl.Trainer(
+    supervised_trainer = pl.Trainer(
         gpus=config["gpus"],
         max_epochs=config["epochs"],
         logger=wandb_logger,
-        callbacks=[modelCheckpoint],
+        callbacks=[supervised_checkpt],
         log_every_n_steps=1,
         check_val_every_n_epoch=1
     )
+    supervised_trainer.fit(supervised_model, datamodule=supervised_datamodule)
+    #TODO add test and log to wandb
+    best = supervised_model.load_from_checkpoint(supervised_checkpt.best_model_path)
+    return best,supervised_datamodule
 
-    trainer.fit(model, datamodule=datamodule)
+def test_supervised(config, wandb_logger, model, datamodule):
+    """Test the supervised model.
 
-    # Load best model
-    model = model.load_from_checkpoint(modelCheckpoint.best_model_path)
-
+    Args:
+        config (dict): Configuration dictionary.
+        wandb_logger (WandbLogger): WandB logger.
+        model (LstmClassifier): Trained supervised model.
+        datamodule (DataModule): DataModule.
+    """
     # ugly compatibility stuff
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # TODO: avoid passing device, use pytorch lightning
     model.to(device)
 
-    #TODO: test and create confusion matrix
     train_confusion_matrix_absolute, final_train_wrong_predictions, final_train_sentence_wise_accuracy = get_evaluation(
         model, datamodule.train_dataloader(),
         device,
@@ -375,6 +391,31 @@ def main(args):
                 "generalization_test_color_accuracy": gen_test_color_accuracy,
                 "generalization_test_object_accuracy": gen_test_object_accuracy})
     print_with_time(f"Generalization test accuracy: {gen_test_accuracy:8.4f}%")
+
+
+def main(args):
+    pl.seed_everything(42, workers=True) # for reproducibility
+    config = load_config(args.config, args.debug)
+    print("Config:", config)
+
+    wandb_logger = WandbLogger(
+        project=config["wandb_project"],
+        name=config["run_name"],
+        save_dir=config["output_dir"],
+        anonymous="allow",
+    )
+    wandb_logger.experiment.config.update(config)
+
+    # First Train Unsupervised model
+    unsupervised_model = train_unsupervised(config, wandb_logger)
+
+    # Use the trained model to get the latent space, dismiss its decoder
+    unsupervised_model = unsupervised_model.encoder
+
+    # Train supervised model
+    supervised_model, supervised_data = train_supervised(config, wandb_logger, unsupervised_model)
+
+    test_supervised(config, wandb_logger, supervised_model, supervised_data)
 
 
 if __name__ == "__main__":

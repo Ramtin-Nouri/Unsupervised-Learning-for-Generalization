@@ -1,7 +1,7 @@
 {
     "gpus": 1,
     "epochs": 10,
-    "batch_size": 2,
+    "batch_size": 1,
     "num_workers": 8,
     "input_length": 14,
     "input_stride": 1,
