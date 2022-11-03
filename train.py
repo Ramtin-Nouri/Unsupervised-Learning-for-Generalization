@@ -47,6 +47,8 @@ def load_config(config_path, debug=False):
         learning_rate=config_file.get("learning_rate", default["learning_rate"]),
         convolution_layers_encoder=config_file.get("convolution_layers_encoder", default["convolution_layers_encoder"]),
         convolution_layers_decoder=config_file.get("convolution_layers_decoder", default["convolution_layers_decoder"]),
+        dense_layers_encoder=config_file.get("dense_layers_encoder", default["dense_layers_encoder"]),
+        dense_layers_decoder=config_file.get("dense_layers_decoder", default["dense_layers_decoder"]),
         lstm_num_layers=config_file.get("lstm_num_layers", default["lstm_num_layers"]),
         lstm_hidden_size=config_file.get("lstm_hidden_size", default["lstm_hidden_size"]),
     )

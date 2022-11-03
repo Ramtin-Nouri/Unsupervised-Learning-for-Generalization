@@ -51,6 +51,7 @@ class LstmClassifier(LightningModule):
         hidden_dim = 512
 
         self.encoder = encoder
+        self.encoder.requires_frad = False
         self.decoder = ClassificationLstmDecoder(input_size=LABEL_SIZE, hidden_size=hidden_dim, dropout=dropout)
 
         self.loss_fn = nn.CrossEntropyLoss()

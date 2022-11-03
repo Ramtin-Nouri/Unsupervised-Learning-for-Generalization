@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch
 import numpy as np
 from einops import rearrange
+from helper import *
 
 
 class LstmEncoder(LightningModule):
@@ -20,10 +21,16 @@ class LstmEncoder(LightningModule):
         torch.Tensor: Hidden state of the LSTM.
     """
 
-    def __init__(self, conv_features, dense_features, input_size, hidden_size, num_layers=1):
+    def __init__(self, config):
         super().__init__()
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
+        conv_features = config["convolution_layers_encoder"]
+        dense_features = config["dense_layers_encoder"]
+        self.hidden_size = config["lstm_hidden_size"]
+        self.hidden_size = config["lstm_hidden_size"]
+        self.num_layers = config["lstm_num_layers"]
+        self.use_joints = config["use_joints"]
+        self.num_joints = config["num_joints"]
+        input_size = self.calculate_lstm_input_size(config)
 
         # Add convolutional layers
         conv_layer_list = []
@@ -41,8 +48,8 @@ class LstmEncoder(LightningModule):
             dense_layer_list.append(nn.Sigmoid())
         self.dense_layers = nn.Sequential(*dense_layer_list)
         
-        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size,
-                            num_layers=num_layers, batch_first=True)
+        self.lstm = nn.LSTM(input_size=input_size, hidden_size=self.hidden_size,
+                            num_layers=self.num_layers, batch_first=True)
 
     def forward(self, hidden, x_frames, x_joints=None):
         """Forward pass of the encoder.
@@ -58,7 +65,10 @@ class LstmEncoder(LightningModule):
         """
         x = self.conv_layers(x_frames) # shape: (N, conv_features[-1] * H/2**len(conv_features) * W/2**len(conv_features))
 
-        if x_joints is not None:
+        if self.use_joints:
+            if x_joints is None:
+                print_warning("Using joints but no joints given")
+                x_joints = torch.zeros((x_frames.shape[0] ,self.num_joints), device=x_frames.device)
             dense_out = self.dense_layers(x_joints)
             x = torch.cat((x, dense_out), dim=1)
 
@@ -71,6 +81,15 @@ class LstmEncoder(LightningModule):
         # Initialize the hidden state of the LSTM
         return  (torch.zeros((self.num_layers, batch_size, self.hidden_size), device=device),
                 torch.zeros((self.num_layers, batch_size, self.hidden_size), device=device))
+            
+    def calculate_lstm_input_size(self, config):
+        img_size = np.array((config["width"], config["height"]))
+        for i in range(len(config["convolution_layers_encoder"]) - 1):
+            img_size = img_size// 2
+        total = int(np.prod(img_size) * config["convolution_layers_encoder"][-1])
+        if config["use_joints"]:
+            total += config["dense_layers_encoder"][-1]
+        return total
 
 
 class CnnDecoder(LightningModule):
@@ -87,8 +106,15 @@ class CnnDecoder(LightningModule):
         torch.Tensor: Predicted image.
     """
 
-    def __init__(self, conv_features, dense_features, input_shape, output_shape, num_joints=6):
+    def __init__(self, config):
         super().__init__()
+        conv_features = config["convolution_layers_decoder"]
+        dense_features = config["dense_layers_decoder"]
+        input_shape = config["lstm_hidden_size"]
+        output_shape = (config["height"], config["width"])
+        self.num_joints = config["num_joints"]
+        self.use_joints = config["use_joints"]
+        
         # Build the layer list backwards then reverse it (to know the exact shapes)
         layer_list = []
         current_shape = output_shape
@@ -107,20 +133,21 @@ class CnnDecoder(LightningModule):
         self.conv_layers = nn.Sequential(*layer_list)
 
         dense_list = []
-        for i in range(len(dense_features) - 1):
+        dense_list.append(nn.Linear(input_shape, dense_features[0]))
+        for i in range(1,len(dense_features) - 1):
             dense_list.append(nn.Linear(dense_features[i], dense_features[i + 1]))
             dense_list.append(nn.Sigmoid())
-        dense_list.append(nn.Linear(dense_features[-1], num_joints))
+        dense_list.append(nn.Linear(dense_features[-1], self.num_joints))
         self.dense_layers = nn.Sequential(*dense_list)
 
 
-    def forward(self, x_frames, x_joints=None):
+    def forward(self, x):
         # x_input.shape : (N, 1, hidden_size)
         # output.shape : (N, L, 3, 224, 398)
 
-        conv_out = self.conv_layers(x_frames)
-        if x_joints is not None:
-            dense_out = self.dense_layers(x_joints)
+        conv_out = self.conv_layers(x)
+        if self.use_joints:
+            dense_out = self.dense_layers(x)
             return conv_out, dense_out
         return conv_out
 
@@ -140,13 +167,13 @@ class LstmAutoencoder(LightningModule):
 
     def __init__(self, config):
         super().__init__()
-        self.config = config
         self.learning_rate = config["learning_rate"]
+        self.loss = nn.MSELoss()
+        self.use_joints = config["use_joints"]
+        self.num_joints = config["num_joints"]
 
-
-        lstm_in = self.calculate_lstm_input_size()
-        self.encoder = LstmEncoder(config["convolution_layers_encoder"], config["dense_layers_encoder "], lstm_in, config["lstm_hidden_size"], config["lstm_num_layers"])
-        self.decoder = CnnDecoder(config["convolution_layers_decoder"], config["lstm_hidden_size"],(config["height"], config["width"], config["num_joints"]))
+        self.encoder = LstmEncoder(config)
+        self.decoder = CnnDecoder(config)
 
     def forward(self, x_frames, x_joints=None):
         """Forward pass of the autoencoder.
@@ -159,16 +186,20 @@ class LstmAutoencoder(LightningModule):
             torch.Tensor: Predicted frames. Shape: (N, L, C, H, W) i.e. (batch_size, sequence_length, 3, 224, 398)
             torch.Tensor: Predicted joints. Shape: (N, L, J)
         """
-        hidden = self.encoder.init_hidden(x_frames.shape[0],device = x_frames.device) #init hidden state
-
+        hidden = self.encoder.init_hidden(x_frames.shape[0], device=x_frames.device) #init hidden state
         x_frames = rearrange(x_frames, 'n l c h w -> l n c h w')
-        if x_joints is not None:
-            x_joints = rearrange(x_joints, 'n l c -> l n c', c=self.config["num_joints"])
-        for i in range(x_frames.shape[0]):
-            if x_joints is not None:
-                output_encoder = self.encoder(hidden, x_frames[i])    
+
+        if self.use_joints:
+            if x_joints is None:
+                print_warning("Using joints but no joints given")
+                x_joints = torch.zeros((x_frames.shape[0], x_frames.shape[1] ,self.num_joints), device=x_frames.device)
             else:
-                output_encoder, hidden = self.encoderhidden(hidden, x_frames[i], x_joints[i])
+                x_joints = rearrange(x_joints, 'n l c -> l n c', c=self.num_joints)
+            for i in range(x_frames.shape[0]):
+                output_encoder, hidden = self.encoder(hidden, x_frames[i], x_joints[i])
+        else:
+            for i in range(x_frames.shape[0]):
+                output_encoder, hidden = self.encoder(hidden, x_frames[i])    
         # output.shape : (N, hidden_size)
 
         # Feed the LSTM output to the decoder
@@ -178,13 +209,13 @@ class LstmAutoencoder(LightningModule):
     def training_step(self, batch, batch_idx):
         x_frames, x_joints, y_frames, y_joints = batch
          
-        if self.config["use_joints"]:
+        if self.use_joints:
             out_frames, out_joints = self(x_frames, x_joints)
-            loss = nn.MSELoss()(out_frames, y_frames)
-            loss += nn.MSELoss()(out_joints, y_joints)
+            loss = self.loss(out_frames, y_frames)
+            loss += self.loss(out_joints, y_joints)
         else:
-            out_frames = self(x_frames, x_joints)
-            loss = nn.MSELoss()(out_frames, y_frames)
+            out_frames = self(x_frames)
+            loss = self.loss(out_frames, y_frames)
 
         self.log('train_loss', loss)
         return loss
@@ -194,9 +225,3 @@ class LstmAutoencoder(LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-
-    def calculate_lstm_input_size(self):
-        img_size = np.array((self.config["width"], self.config["height"]))
-        for i in range(len(self.config["convolution_layers_encoder"]) - 1):
-            img_size = img_size// 2
-        return int(np.prod(img_size) * self.config["convolution_layers_encoder"][-1])
