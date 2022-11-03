@@ -30,9 +30,9 @@ class LstmEncoder(LightningModule):
         self.num_layers = config["lstm_num_layers"]
         self.use_joints = config["use_joints"]
         self.num_joints = config["num_joints"]
-        input_size = self.calculate_lstm_input_size(config)
 
         # Add convolutional layers
+        conv_features.insert(0, 3) # Input should always be 3 (RGB)
         conv_layer_list = []
         for i in range(len(conv_features) - 1):
             conv_layer_list.append(nn.Conv2d(conv_features[i], conv_features[i + 1], kernel_size=3, stride=1, padding=1))
@@ -43,12 +43,13 @@ class LstmEncoder(LightningModule):
         self.conv_layers = nn.Sequential(*conv_layer_list)
 
         dense_layer_list = []
+        dense_features.insert(0, self.num_joints)
         for i in range(len(dense_features) - 1):
             dense_layer_list.append(nn.Linear(dense_features[i], dense_features[i + 1]))
             dense_layer_list.append(nn.Sigmoid())
         self.dense_layers = nn.Sequential(*dense_layer_list)
         
-        self.lstm = nn.LSTM(input_size=input_size, hidden_size=self.hidden_size,
+        self.lstm = nn.LSTM(input_size=self.calculate_lstm_input_size(config), hidden_size=self.hidden_size,
                             num_layers=self.num_layers, batch_first=True)
 
     def forward(self, hidden, x_frames, x_joints=None):
@@ -117,6 +118,7 @@ class CnnDecoder(LightningModule):
         
         # Build the layer list backwards then reverse it (to know the exact shapes)
         layer_list = []
+        conv_features.insert(0, 1) # Input should always be 1 (unflattened from dense)
         current_shape = output_shape
         for i in range(len(conv_features) - 2,-1,-1):
             layer_list.append(nn.Upsample(size=current_shape, mode='bilinear'))
@@ -132,9 +134,9 @@ class CnnDecoder(LightningModule):
         layer_list.append(nn.Sigmoid())
         self.conv_layers = nn.Sequential(*layer_list)
 
+        dense_features.insert(0, input_shape)
         dense_list = []
-        dense_list.append(nn.Linear(input_shape, dense_features[0]))
-        for i in range(1,len(dense_features) - 1):
+        for i in range(len(dense_features) - 1):
             dense_list.append(nn.Linear(dense_features[i], dense_features[i + 1]))
             dense_list.append(nn.Sigmoid())
         dense_list.append(nn.Linear(dense_features[-1], self.num_joints))
@@ -174,6 +176,7 @@ class LstmAutoencoder(LightningModule):
 
         self.encoder = LstmEncoder(config)
         self.decoder = CnnDecoder(config)
+        self.save_hyperparameters()
 
     def forward(self, x_frames, x_joints=None):
         """Forward pass of the autoencoder.
@@ -207,6 +210,16 @@ class LstmAutoencoder(LightningModule):
         return output_decoder
 
     def training_step(self, batch, batch_idx):
+        loss = self.step(batch)
+        self.log('train_loss', loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        loss = self.step(batch)
+        self.log('val_loss', loss)
+        return loss
+
+    def step(self, batch):
         x_frames, x_joints, y_frames, y_joints = batch
          
         if self.use_joints:
@@ -216,12 +229,8 @@ class LstmAutoencoder(LightningModule):
         else:
             out_frames = self(x_frames)
             loss = self.loss(out_frames, y_frames)
-
-        self.log('train_loss', loss)
         return loss
 
-    def validation_step(self, batch, batch_idx):
-        return self.training_step(batch, batch_idx)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
