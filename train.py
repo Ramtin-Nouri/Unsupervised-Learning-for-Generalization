@@ -5,7 +5,6 @@ import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 from torchvision import transforms
 from torch.utils.data import DataLoader
-from torchinfo import summary
 from datetime import datetime
 import json
 import os
@@ -16,7 +15,14 @@ from helper import *
 from evaluation import *
 
 def parse_args():
-    """Parse command line arguments."""
+    """Parse command line arguments.
+    Namely the config file and debug mode.
+    Config file is a json file with all the parameters.
+    Debug mode is a boolean that determines if the code is run in debug mode. By default it is False.
+
+    Returns:
+        argparse.Namespace: Parsed arguments.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/default.json", required=True)
     parser.add_argument("--debug", type=bool, default=False)
@@ -117,7 +123,6 @@ def train_unsupervised(config, wandb_logger):
     unsupervised_datamodule = dataset.DataModule(config, True)
     unsupervised_model = LstmAutoencoder(config)
     print("Unsupervised model:", unsupervised_model)
-    #summary(unsupervised_model, input_size=(config["batch_size"], config["input_length"], 3, config["height"], config["width"]))
     wandb_logger.watch(unsupervised_model, log="all")
 
     unsupervised_checkpt = pl.callbacks.ModelCheckpoint(
@@ -140,7 +145,7 @@ def train_unsupervised(config, wandb_logger):
     )
     unsupervised_trainer.fit(unsupervised_model, datamodule=unsupervised_datamodule)
     #TODO add test and log to wandb
-    #TODO: load best model isntead of last
+    #TODO: load best model instead of last
     return unsupervised_model
 
 def train_supervised(config, wandb_logger, unsupervised_model):
@@ -158,7 +163,6 @@ def train_supervised(config, wandb_logger, unsupervised_model):
     supervised_datamodule = dataset.DataModule(config, False)
     supervised_model = LstmClassifier(config, unsupervised_model)
     print("Supervised model:", supervised_model)
-    summary(supervised_model, input_size=(config["batch_size"], config["input_length"], 3, config["height"], config["width"]))
     wandb_logger.watch(supervised_model, log="all")
 
     supervised_checkpt = pl.callbacks.ModelCheckpoint(
@@ -179,7 +183,6 @@ def train_supervised(config, wandb_logger, unsupervised_model):
         check_val_every_n_epoch=1
     )
     supervised_trainer.fit(supervised_model, datamodule=supervised_datamodule)
-    #TODO add test and log to wandb
     #best = supervised_model.load_from_checkpoint(supervised_checkpt.best_model_path)
     # TODO: load best model instead of last
     return supervised_model,supervised_datamodule
