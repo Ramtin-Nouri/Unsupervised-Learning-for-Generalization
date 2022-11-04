@@ -277,7 +277,6 @@ def test_supervised(config, wandb_logger, model, datamodule):
     else:
         transform = normal_transform
 
-    #TODO can we move this to the datamodule?
     for i in range(1, 7):
         test_data = dataset.MultimodalSimulation(path=config["data_path"],
                                             visible_objects=i,

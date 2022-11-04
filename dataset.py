@@ -1,7 +1,7 @@
 import glob
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from torchvision.io import read_image
 from pytorch_lightning import LightningDataModule
 from torchvision import transforms
@@ -210,33 +210,44 @@ class DataModule(LightningDataModule):
     def setup(self, stage=None):
         if self.unsupervised:
             # hardcode to configuarion with most diverse data
-            unsupervised_train = MultimodalSimulation(path=self.config["data_path"],
-                                            visible_objects=6,
-                                            different_actions=4,
-                                            different_colors=6,
-                                            different_objects=9,
-                                            exclusive_colors=False,
-                                            part="training",
-                                            num_samples=self.config["num_training_samples"],
-                                            input_length=self.config["input_length"],
-                                            frame_stride=self.config["input_stride"],
-                                            transform=self.transform,
-                                            debug=self.config["debug"])
-            unsupervised_val = MultimodalSimulation(path=self.config["data_path"],
-                                            visible_objects=6,
-                                            different_actions=4,
-                                            different_colors=6,
-                                            different_objects=9,
-                                            exclusive_colors=False,
-                                            part="validation",
-                                            num_samples=self.config["num_validation_samples"],
-                                            input_length=self.config["input_length"],
-                                            frame_stride=self.config["input_stride"],
-                                            transform=self.transform,
-                                            debug=self.config["debug"])
-            # TODO: concatenate all datasets
-            training_data = unsupervised_train
-            validation_data = unsupervised_val
+            train_datasets=[]
+            val_datasets=[]
+            for visible_objects in [1,2,6]:
+                for colors in [1,6]:
+                    for exclusive_colors in [False,True]:
+                        if exclusive_colors:
+                            different_objects = 4
+                        else:
+                            different_objects = 9
+
+                        train_datasets.append(MultimodalSimulation(path=self.config["data_path"],
+                                                        visible_objects=visible_objects,
+                                                        different_actions=4,
+                                                        different_colors=colors,
+                                                        different_objects=different_objects,
+                                                        exclusive_colors=exclusive_colors,
+                                                        part="training",
+                                                        num_samples=self.config["num_training_samples"],
+                                                        input_length=self.config["input_length"],
+                                                        frame_stride=self.config["input_stride"],
+                                                        transform=self.transform,
+                                                        debug=self.config["debug"])
+                        )
+                        val_datasets.append(MultimodalSimulation(path=self.config["data_path"],
+                                                        visible_objects=6,
+                                                        different_actions=4,
+                                                        different_colors=6,
+                                                        different_objects=9,
+                                                        exclusive_colors=False,
+                                                        part="validation",
+                                                        num_samples=self.config["num_validation_samples"],
+                                                        input_length=self.config["input_length"],
+                                                        frame_stride=self.config["input_stride"],
+                                                        transform=self.transform,
+                                                        debug=self.config["debug"])
+                        )
+            training_data = ConcatDataset(train_datasets)
+            validation_data = ConcatDataset(val_datasets)
         else:
             training_data = MultimodalSimulation(path=self.config["data_path"],
                                                 visible_objects=self.config["visible_objects"],
