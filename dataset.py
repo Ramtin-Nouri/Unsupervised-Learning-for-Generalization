@@ -227,7 +227,7 @@ class DataModule(LightningDataModule):
                                                         different_objects=different_objects,
                                                         exclusive_colors=exclusive_colors,
                                                         part="training",
-                                                        num_samples=self.config["num_training_samples"],
+                                                        num_samples=self.config["num_training_samples_unsupervised"],
                                                         input_length=self.config["input_length"],
                                                         frame_stride=self.config["input_stride"],
                                                         transform=self.transform,
@@ -240,7 +240,7 @@ class DataModule(LightningDataModule):
                                                         different_objects=9,
                                                         exclusive_colors=False,
                                                         part="validation",
-                                                        num_samples=self.config["num_validation_samples"],
+                                                        num_samples=self.config["num_validation_samples_unsupervised"],
                                                         input_length=self.config["input_length"],
                                                         frame_stride=self.config["input_stride"],
                                                         transform=self.transform,
@@ -248,6 +248,8 @@ class DataModule(LightningDataModule):
                         )
             training_data = ConcatDataset(train_datasets)
             validation_data = ConcatDataset(val_datasets)
+            print(f"Training data consists of {len(train_datasets)} datasets with {len(training_data)} samples")
+            print(f"Validation data consists of {len(val_datasets)} datasets with {len(validation_data)} samples")
         else:
             training_data = MultimodalSimulation(path=self.config["data_path"],
                                                 visible_objects=self.config["visible_objects"],
