@@ -234,8 +234,9 @@ class DataModule(LightningDataModule):
                                             frame_stride=self.config["input_stride"],
                                             transform=self.transform,
                                             debug=self.config["debug"])
-            training_data = UnsupervisedDataset(unsupervised_train)
-            validation_data = UnsupervisedDataset(unsupervised_val)
+            # TODO: concatenate all datasets
+            training_data = unsupervised_train
+            validation_data = unsupervised_val
         else:
             training_data = MultimodalSimulation(path=self.config["data_path"],
                                                 visible_objects=self.config["visible_objects"],
@@ -274,19 +275,4 @@ class DataModule(LightningDataModule):
 
     def val_dataloader(self):
         return self.val_loader
-
-    
-class UnsupervisedDataset(Dataset):
-    """Wrapper around MultimodalSimulation to return only frames and joints.
-    Use last frame and joint as label for unsupervised learning.
-    """
-    def __init__(self, dataset):
-        self.dataset = dataset
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, idx):
-        frames, joints, _ = self.dataset[idx]
-        return frames[:-1], joints[:-1], frames[-1], joints[-1]
 

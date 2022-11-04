@@ -41,6 +41,7 @@ def load_config(config_path, debug=False):
         batch_size=config_file.get("batch_size", default["batch_size"]),
         num_workers=config_file.get("num_workers", default["num_workers"]),
         input_length=config_file.get("input_length", default["input_length"]),
+        init_length=config_file.get("init_length", default["init_length"]),
         input_stride=config_file.get("input_stride", default["input_stride"]),
         use_joints=config_file.get("use_joints", default["use_joints"]),
         output_dir=config_file.get("output_dir", default["output_dir"]),
@@ -116,7 +117,7 @@ def train_unsupervised(config, wandb_logger):
     unsupervised_datamodule = dataset.DataModule(config, True)
     unsupervised_model = LstmAutoencoder(config)
     print("Unsupervised model:", unsupervised_model)
-    summary(unsupervised_model, input_size=(config["batch_size"], config["input_length"], 3, config["height"], config["width"]))
+    #summary(unsupervised_model, input_size=(config["batch_size"], config["input_length"], 3, config["height"], config["width"]))
     wandb_logger.watch(unsupervised_model, log="all")
 
     unsupervised_checkpt = pl.callbacks.ModelCheckpoint(

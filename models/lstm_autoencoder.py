@@ -174,40 +174,40 @@ class LstmAutoencoder(LightningModule):
         self.loss = nn.MSELoss()
         self.use_joints = config["use_joints"]
         self.num_joints = config["num_joints"]
+        self.init_length = config["init_length"]
 
         self.encoder = LstmEncoder(config)
         self.decoder = CnnDecoder(config)
 
-    def forward(self, x_frames, x_joints=None):
+    def forward(self, x_frames, x_joints=None, hidden=None):
         """Forward pass of the autoencoder.
+        Given a frame and the previous hidden state, predicts the next frame.
 
         Args:
-            x_frames (torch.Tensor): Input frames. Shape: (N, L, C, H, W) i.e. (batch_size, sequence_length, 3, 224, 398)
-            x_joints (torch.Tensor): Input joints. Shape: (N, L, J, 3) i.e. (batch_size, sequence_length, num_joints)
+            x_frames (torch.Tensor): Input frames. Shape: (N, C, H, W) i.e. (batch_size, 3, 224, 398)
+            x_joints (torch.Tensor): Input joints. Shape: (N, J, 3) i.e. (batch_size, num_joints)
 
         Returns:
-            torch.Tensor: Predicted frames. Shape: (N, L, C, H, W) i.e. (batch_size, sequence_length, 3, 224, 398)
-            torch.Tensor: Predicted joints. Shape: (N, L, J)
+            torch.Tensor: Predicted frames. Shape: (N, C, H, W) i.e. (batch_size, 3, 224, 398)
+            torch.Tensor: Predicted joints. Shape: (N, J) Only if use_joints is True
+            torch.Tensor: Hidden state of the LSTM. Shape: (N, H) i.e. (batch_size, hidden_size)
         """
-        hidden = self.encoder.init_hidden(x_frames.shape[0], device=x_frames.device) #init hidden state
-        x_frames = rearrange(x_frames, 'n l c h w -> l n c h w')
+        if hidden is None:
+            print_warning("No hidden state given, initializing hidden state")
+            hidden = self.encoder.init_hidden(x_frames.shape[0], x_frames.device)
 
         if self.use_joints:
             if x_joints is None:
                 print_warning("Using joints but no joints given")
                 x_joints = torch.zeros((x_frames.shape[0], x_frames.shape[1] ,self.num_joints), device=x_frames.device)
-            else:
-                x_joints = rearrange(x_joints, 'n l c -> l n c', c=self.num_joints)
-            for i in range(x_frames.shape[0]):
-                output_encoder, hidden = self.encoder(hidden, x_frames[i], x_joints[i])
+            output_encoder, hidden = self.encoder(hidden, x_frames, x_joints)
         else:
-            for i in range(x_frames.shape[0]):
-                output_encoder, hidden = self.encoder(hidden, x_frames[i])
+            output_encoder, hidden = self.encoder(hidden, x_frames)
         # output.shape : (N, hidden_size)
 
         # Feed the LSTM output to the decoder
         output_decoder = self.decoder(output_encoder) 
-        return output_decoder
+        return output_decoder, hidden
 
     def training_step(self, batch, batch_idx):
         loss = self.step(batch)
@@ -220,17 +220,33 @@ class LstmAutoencoder(LightningModule):
         return loss
 
     def step(self, batch):
-        x_frames, x_joints, y_frames, y_joints = batch
-         
-        if self.use_joints:
-            out_frames, out_joints = self(x_frames, x_joints)
-            loss = self.loss(out_frames, y_frames)
-            loss += self.loss(out_joints, y_joints)
-        else:
-            out_frames = self(x_frames)
-            loss = self.loss(out_frames, y_frames)
-        return loss
+        x_frames, x_joints, _ = batch
+        x_frames = rearrange(x_frames, 'n l c h w -> l n c h w')
+        x_joints = rearrange(x_joints, 'n l c -> l n c', c=self.num_joints)
+        hidden = self.encoder.init_hidden(x_frames.shape[1], device=x_frames.device) #init hidden state
+        
+        # feed starting frames to the model
+        start_frames = x_frames[:self.init_length]
+        start_joints = x_joints[:self.init_length]
+        for i in range(self.init_length):
+            if self.use_joints: 
+                _, hidden = self.encoder(hidden, start_frames[i], start_joints[i])
+            else:
+                _, hidden = self.encoder(hidden, start_frames[i])
 
+        # feed the rest of the frames to the model
+        x_frames = x_frames[self.init_length:]
+        x_joints = x_joints[self.init_length:]
+        losses = []
+        for i in range(len(x_frames)-1):
+            if self.use_joints:
+                (output_frames, output_joints), hidden = self(x_frames[i], x_joints[i], hidden)
+                losses.append(self.loss(output_frames, x_frames[i+1]))
+                losses.append(self.loss(output_joints, x_joints[i+1]))
+            else:
+                output_frames, hidden = self(x_frames[i], hidden=hidden)
+                losses.append(self.loss(output_frames, x_frames[i+1]))
+        return torch.sum(torch.stack(losses))
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
