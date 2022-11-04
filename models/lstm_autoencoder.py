@@ -169,6 +169,7 @@ class LstmAutoencoder(LightningModule):
 
     def __init__(self, config):
         super().__init__()
+        self.save_hyperparameters()
         self.learning_rate = config["learning_rate"]
         self.loss = nn.MSELoss()
         self.use_joints = config["use_joints"]
@@ -176,7 +177,6 @@ class LstmAutoencoder(LightningModule):
 
         self.encoder = LstmEncoder(config)
         self.decoder = CnnDecoder(config)
-        self.save_hyperparameters()
 
     def forward(self, x_frames, x_joints=None):
         """Forward pass of the autoencoder.
@@ -202,7 +202,7 @@ class LstmAutoencoder(LightningModule):
                 output_encoder, hidden = self.encoder(hidden, x_frames[i], x_joints[i])
         else:
             for i in range(x_frames.shape[0]):
-                output_encoder, hidden = self.encoder(hidden, x_frames[i])    
+                output_encoder, hidden = self.encoder(hidden, x_frames[i])
         # output.shape : (N, hidden_size)
 
         # Feed the LSTM output to the decoder

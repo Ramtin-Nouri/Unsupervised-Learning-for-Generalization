@@ -122,6 +122,7 @@ def train_unsupervised(config, wandb_logger):
     unsupervised_checkpt = pl.callbacks.ModelCheckpoint(
         dirpath=config["model_path"],
         save_top_k=1,
+        save_weights_only=True,
         verbose=True,
         monitor="val_loss",
         mode="min",
@@ -138,8 +139,8 @@ def train_unsupervised(config, wandb_logger):
     )
     unsupervised_trainer.fit(unsupervised_model, datamodule=unsupervised_datamodule)
     #TODO add test and log to wandb
-    best = unsupervised_model.load_from_checkpoint(unsupervised_checkpt.best_model_path)
-    return best
+    #TODO: load best model isntead of last
+    return unsupervised_model
 
 def train_supervised(config, wandb_logger, unsupervised_model):
     """Train the supervised model.
@@ -178,8 +179,9 @@ def train_supervised(config, wandb_logger, unsupervised_model):
     )
     supervised_trainer.fit(supervised_model, datamodule=supervised_datamodule)
     #TODO add test and log to wandb
-    best = supervised_model.load_from_checkpoint(supervised_checkpt.best_model_path)
-    return best,supervised_datamodule
+    #best = supervised_model.load_from_checkpoint(supervised_checkpt.best_model_path)
+    # TODO: load best model instead of last
+    return supervised_model,supervised_datamodule
 
 def test_supervised(config, wandb_logger, model, datamodule):
     """Test the supervised model.
@@ -266,7 +268,7 @@ def test_supervised(config, wandb_logger, model, datamodule):
 
     normal_transform = transforms.Normalize(mean=dataset_mean, std=dataset_std)
     torchvision_transform = transforms.Normalize(mean=torchvision_mean, std=torchvision_std)
-    if config["pretrained"]:
+    if False: #TODO
         transform = torchvision_transform
     else:
         transform = normal_transform
