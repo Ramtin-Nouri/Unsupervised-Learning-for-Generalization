@@ -75,8 +75,6 @@ class MultimodalSimulation(Dataset):
 
     def __len__(self):
         """Returns the number of samples in the dataset."""
-        if self.debug:
-            return 20
         return self.num_samples
 
     def __getitem__(self, item):
@@ -209,7 +207,7 @@ class DataModule(LightningDataModule):
 
     def setup(self, stage=None):
         if self.unsupervised:
-            # hardcode to configuarion with most diverse data
+            # For unsupervised training we use the whole dataset
             train_datasets=[]
             val_datasets=[]
             for visible_objects in [1,2,6]:
@@ -250,6 +248,37 @@ class DataModule(LightningDataModule):
             validation_data = ConcatDataset(val_datasets)
             print(f"Training data consists of {len(train_datasets)} datasets with {len(training_data)} samples")
             print(f"Validation data consists of {len(val_datasets)} datasets with {len(validation_data)} samples")
+            test_datasets=[]
+            for V in range(1,7):
+                test_datasets.append(MultimodalSimulation(path=self.config["data_path"],
+                                                visible_objects=V,
+                                                different_actions=0,
+                                                different_colors=0,
+                                                different_objects=0,
+                                                exclusive_colors=False,
+                                                part="constant-test",
+                                                num_samples=2,
+                                                input_length=self.config["input_length"],
+                                                frame_stride=self.config["input_stride"],
+                                                transform=self.transform,
+                                                debug=self.config["debug"])
+                )
+                test_datasets.append(MultimodalSimulation(path=self.config["data_path"],
+                                                visible_objects=V,
+                                                different_actions=0,
+                                                different_colors=0,
+                                                different_objects=0,
+                                                exclusive_colors=False,
+                                                part="generalization-test",
+                                                num_samples=2,
+                                                input_length=self.config["input_length"],
+                                                frame_stride=self.config["input_stride"],
+                                                transform=self.transform,
+                                                debug=self.config["debug"])
+                )
+            test_data = ConcatDataset(test_datasets)
+            print(f"Test data consists of {len(test_datasets)} datasets with {len(test_data)} samples")
+            self.test_loader = DataLoader(test_data, batch_size=1, shuffle=False, num_workers=self.config["num_workers"])
         else:
             training_data = MultimodalSimulation(path=self.config["data_path"],
                                                 visible_objects=self.config["visible_objects"],
@@ -288,4 +317,7 @@ class DataModule(LightningDataModule):
 
     def val_dataloader(self):
         return self.val_loader
+    
+    def test_dataloader(self):
+        return self.test_loader
 

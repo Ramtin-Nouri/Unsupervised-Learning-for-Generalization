@@ -78,6 +78,8 @@ def load_config(config_path, debug=False):
     if debug:
         config["num_training_samples"] = 20
         config["num_validation_samples"] = 20
+        config["num_training_samples_unsupervised"] = 5
+        config["num_validation_samples_unsupervised"] = 5
         config["epochs"] = 1
         config["unsupervised_epochs"] = 1
     config["debug"] = debug
@@ -146,7 +148,16 @@ def train_unsupervised(config, wandb_logger):
         check_val_every_n_epoch=1
     )
     unsupervised_trainer.fit(unsupervised_model, datamodule=unsupervised_datamodule)
-    #TODO add test and log to wandb
+    # Log test images
+    i = 0
+    for batch in unsupervised_datamodule.test_dataloader(): #batch_size = 1
+        pred = unsupervised_model.predict(batch)
+        if config["use_joints"]:
+            pred = pred[0]
+        target = batch[0][0][-1]
+        wandb_logger.log_image(key=f"test_image", step=i, images=[pred, target], caption=["prediction", "target"])
+        i += 1
+
     #TODO: load best model instead of last
     return unsupervised_model
 

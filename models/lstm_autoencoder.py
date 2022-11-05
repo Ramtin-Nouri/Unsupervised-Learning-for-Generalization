@@ -247,6 +247,33 @@ class LstmAutoencoder(LightningModule):
                 output_frames, hidden = self(x_frames[i], hidden=hidden)
                 losses.append(self.loss(output_frames, x_frames[i+1]))
         return torch.sum(torch.stack(losses))
+    
+    def predict(self,batch):
+        """Predicts the last frame given the all but the last frames.
+
+        Args:
+            batch (torch.Tensor): Input frames. Shape: (N, L, C, H, W) i.e. (batch_size, seq_length, 3, 224, 398)
+
+        Returns:
+            torch.Tensor: Predicted frames. Shape: (N, C, H, W) i.e. (batch_size, 3, 224, 398)
+            torch.Tensor: Predicted joints. Shape: (N, J) Only if use_joints is True
+        """
+        x_frames, x_joints, _ = batch
+        x_frames = rearrange(x_frames, 'n l c h w -> l n c h w')
+        x_joints = rearrange(x_joints, 'n l c -> l n c', c=self.num_joints)
+        hidden = self.encoder.init_hidden(x_frames.shape[1], device=x_frames.device)
+
+        for i in range(len(x_frames)-1):
+            if self.use_joints:
+                (output_frames, output_joints), hidden = self(x_frames[i], x_joints[i], hidden)
+            else:
+                output_frames, hidden = self(x_frames[i], hidden=hidden)
+        
+        if self.use_joints:
+            return output_frames, output_joints
+        else:
+            return output_frames        
+        
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
