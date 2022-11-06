@@ -169,7 +169,7 @@ class LstmAutoencoder(LightningModule):
 
     def __init__(self, config):
         super().__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=['encoder'])
         self.learning_rate = config["learning_rate"]
         self.loss = nn.MSELoss()
         self.use_joints = config["use_joints"]

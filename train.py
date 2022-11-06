@@ -140,7 +140,8 @@ def train_unsupervised(config, wandb_logger):
     )
 
     unsupervised_trainer = pl.Trainer(
-        gpus=config["gpus"],
+        accelerator="gpu",
+        devices=config["gpus"],
         max_epochs=config["unsupervised_epochs"],
         logger=wandb_logger,
         callbacks=[unsupervised_checkpt],
@@ -188,7 +189,8 @@ def train_supervised(config, wandb_logger, unsupervised_model):
     )
 
     supervised_trainer = pl.Trainer(
-        gpus=config["gpus"],
+        accelerator="gpu",
+        devices=config["gpus"],
         max_epochs=config["epochs"],
         logger=wandb_logger,
         callbacks=[supervised_checkpt],
