@@ -117,7 +117,7 @@ class LstmClassifier(LightningModule):
         epoch_action_acc = self.training_action_correct * 100 / self.training_total
         epoch_color_acc = self.training_color_correct * 100 / self.training_total
         epoch_object_acc = self.training_object_correct * 100 / self.training_total
-        epoch_acc = (self.training_action_correct + self.training_color_correct + self.training_object_correct) / 3
+        epoch_acc = (epoch_action_acc + epoch_color_acc + epoch_object_acc) / 3
         self.log('train_acc_action', epoch_action_acc, on_step=False, on_epoch=True)
         self.log('train_acc_color', epoch_color_acc, on_step=False, on_epoch=True)
         self.log('train_acc_object', epoch_object_acc, on_step=False, on_epoch=True)
