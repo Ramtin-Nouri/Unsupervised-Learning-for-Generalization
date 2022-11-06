@@ -76,8 +76,8 @@ def load_config(config_path, debug=False):
     config["num_joints"] = dataset.get("num_joints", default["dataset"]["num_joints"])
 
     if debug:
-        config["num_training_samples"] = 20
-        config["num_validation_samples"] = 20
+        config["num_training_samples"] = 10
+        config["num_validation_samples"] = 10
         config["num_training_samples_unsupervised"] = 5
         config["num_validation_samples_unsupervised"] = 5
         config["epochs"] = 1
@@ -290,6 +290,7 @@ def test_supervised(config, wandb_logger, model, datamodule):
     else:
         transform = normal_transform
 
+    num_samples = 10 if config["debug"] else 2000
     for i in range(1, 7):
         test_data = dataset.MultimodalSimulation(path=config["data_path"],
                                             visible_objects=i,
@@ -298,7 +299,7 @@ def test_supervised(config, wandb_logger, model, datamodule):
                                             different_objects=config["different_objects"],
                                             exclusive_colors=config["exclusive_colors"],
                                             part="constant-test",
-                                            num_samples=2000,
+                                            num_samples=num_samples,
                                             input_length=config["input_length"],
                                             frame_stride=config["input_stride"],
                                             transform=transform,
@@ -311,7 +312,7 @@ def test_supervised(config, wandb_logger, model, datamodule):
                                                 different_objects=config["different_objects"],
                                                 exclusive_colors=config["exclusive_colors"],
                                                 part="generalization-test",
-                                                num_samples=2000,
+                                                num_samples=num_samples,
                                                 input_length=config["input_length"],
                                                 frame_stride=config["input_stride"],
                                                 transform=transform,
