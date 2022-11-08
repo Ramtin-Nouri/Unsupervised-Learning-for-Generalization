@@ -11,21 +11,22 @@ class LstmEncoder(LightningModule):
     Uses CNN to extract features from the input image, then feeds the features to the LSTM.
 
     Args:
-        conv_features (list): List of convolutional features.
-        input_size (int): Size of the input image.
-        hidden_size (int): Size of the hidden state of the LSTM.
-        num_layers (int, optional): Number of layers in the LSTM. Defaults to 1.
+        config (dict): Dictionary containing the configuration of the model.
 
-    Returns:
-        torch.Tensor: Output of the LSTM.
-        torch.Tensor: Hidden state of the LSTM.
+    Attributes:
+        hidden_size (int): Hidden size of the LSTM.
+        num_layers (int): Number of layers of the LSTM.
+        use_joints (bool): Whether to use joints as input to the model.
+        num_joints (int): Number of joints.
+        conv_layers (nn.Sequential): Sequential model containing the convolutional layers.
+        dense_layers (nn.Sequential): Sequential model containing the dense layers.
+        lstm (nn.LSTM): LSTM model.
     """
 
     def __init__(self, config):
         super().__init__()
         conv_features = config["convolution_layers_encoder"]
         dense_features = config["dense_layers_encoder"]
-        self.hidden_size = config["lstm_hidden_size"]
         self.hidden_size = config["lstm_hidden_size"]
         self.num_layers = config["lstm_num_layers"]
         self.use_joints = config["use_joints"]
@@ -57,12 +58,14 @@ class LstmEncoder(LightningModule):
 
 
         Args:
-            x_input (torch.Tensor): Input image. Shape: (N, C, H, W) i.e. (batch_size, 3, 224, 398)
-            hidden (torch.Tensor): Hidden state of the LSTM. Shape: (num_layers, N, hidden_size)
-
+            x_input (torch.Tensor): Input image. Shape: (batch_size, 3, height, width) i.e. (batch_size, 3, 224, 398)
+            x_joints (torch.Tensor, optional): Input joints. Shape: (batch_size, num_joints) i.e. (batch_size, 6). Defaults to None.
+            hidden (tuple): Tuple containing the hidden state (hx) and the cell state (cx) of the LSTM.
+                hx (torch.Tensor): Hidden state of the LSTM. Shape: (num_layers, batch_size, hidden_size)
+                cx (torch.Tensor): Cell state of the LSTM. Shape: (num_layers, batch_size, hidden_size)
         Returns:
             torch.Tensor: Output of the LSTM. Shape: (N, hidden_size)
-            torch.Tensor: Hidden state of the LSTM.
+            torch.Tensor: Hidden state of the LSTM. (hx, cx)
         """
         x = self.conv_layers(x_frames) # shape: (N, conv_features[-1] * H/2**len(conv_features) * W/2**len(conv_features))
 
@@ -79,11 +82,31 @@ class LstmEncoder(LightningModule):
         return output, hidden
 
     def init_hidden(self, batch_size, device):
-        # Initialize the hidden state of the LSTM
+        """Initialize the hidden state of the LSTM.
+
+        Args:
+            batch_size (int): Batch size of the input.
+            device (torch.device): Device on which the input is located.
+
+        Returns:
+            tuple: Tuple containing the hidden state (hx) and the cell state (cx) of the LSTM.
+                hx (torch.Tensor): Hidden state of the LSTM. Shape: (num_layers, batch_size, hidden_size)
+                cx (torch.Tensor): Cell state of the LSTM. Shape: (num_layers, batch_size, hidden_size)
+        """
         return  (torch.zeros((self.num_layers, batch_size, self.hidden_size), device=device),
                 torch.zeros((self.num_layers, batch_size, self.hidden_size), device=device))
             
     def calculate_lstm_input_size(self, config):
+        """Calculate the input size of the LSTM.
+        Start with the input size of the image, then half the size for each maxpooling layer.
+        Then multiply with the number of features in the last convolutional layer.
+
+        Args:
+            config (dict): Dictionary containing the configuration of the model.
+
+        Returns:
+            int: Input size of the LSTM.
+        """
         img_size = np.array((config["width"], config["height"]))
         for i in range(len(config["convolution_layers_encoder"]) - 1):
             img_size = img_size// 2
@@ -98,13 +121,13 @@ class CnnDecoder(LightningModule):
     Feeds LSTM output to CNN to predict next frame.
 
     Args:
-        conv_features (list): List of convolutional features.
-        input_size (int): Size of the input image.
-        hidden_size (int): Size of the hidden state of the LSTM.
-        num_layers (int, optional): Number of layers in the LSTM. Defaults to 1.
-
-    Returns:
-        torch.Tensor: Predicted image.
+        config (dict): Dictionary containing the configuration of the model.
+    
+    Attributes:
+        num_joints (int): Number of joints.
+        use_joints (bool): Whether to use joints or not.
+        conv_layers (nn.Sequential): Convolutional layers.
+        dense_layers (nn.Sequential): Dense layers.
     """
 
     def __init__(self, config):
@@ -144,9 +167,15 @@ class CnnDecoder(LightningModule):
 
 
     def forward(self, x):
-        # x_input.shape : (N, 1, hidden_size)
-        # output.shape : (N, L, 3, 224, 398)
+        """Forward pass of the decoder.
 
+        Args:
+            x (torch.Tensor): Input of the decoder. Shape: (batch_size, 1, hidden_size)
+
+        Returns:
+            torch.Tensor: Output of the decoder. Shape: (batch_size, 3, height, width)
+            torch.Tensor: Output of the decoder. Shape: (batch_size, num_joints) (only if use_joints is True)
+        """
         conv_out = self.conv_layers(x)
         if self.use_joints:
             dense_out = self.dense_layers(x)
@@ -184,13 +213,13 @@ class LstmAutoencoder(LightningModule):
         Given a frame and the previous hidden state, predicts the next frame.
 
         Args:
-            x_frames (torch.Tensor): Input frames. Shape: (N, C, H, W) i.e. (batch_size, 3, 224, 398)
-            x_joints (torch.Tensor): Input joints. Shape: (N, J, 3) i.e. (batch_size, num_joints)
+            x_frames (torch.Tensor): Input frames. Shape: (batch_size, 3, height, width) i.e. (batch_size, 3, 224, 398)
+            x_joints (torch.Tensor): Input joints. Shape: (batch_size, num_joints) i.e. (batch_size, 6)
 
         Returns:
-            torch.Tensor: Predicted frames. Shape: (N, C, H, W) i.e. (batch_size, 3, 224, 398)
-            torch.Tensor: Predicted joints. Shape: (N, J) Only if use_joints is True
-            torch.Tensor: Hidden state of the LSTM. Shape: (N, H) i.e. (batch_size, hidden_size)
+            torch.Tensor: Predicted frames. Shape: (batch_size, 3, height, width) i.e. (batch_size, 3, 224, 398)
+            torch.Tensor: Predicted joints. Shape: (batch_size, num_joints) (Only if use_joints is True)
+            torch.Tensor: Hidden state of the LSTM. Shape: (batch_size, hidden_size)
         """
         if hidden is None:
             print_warning("No hidden state given, initializing hidden state")
@@ -210,16 +239,29 @@ class LstmAutoencoder(LightningModule):
         return output_decoder, hidden
 
     def training_step(self, batch, batch_idx):
+        """Training step of the model. See step"""
         loss = self.step(batch)
         self.log('train_loss', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
+        """Validation step of the model. See step"""
         loss = self.step(batch)
         self.log('val_loss', loss)
         return loss
 
     def step(self, batch):
+        """Step of the model.
+
+        Args:
+            batch (tuple): Tuple of (frames, joints, labels)
+                frames (torch.Tensor): Input frames. Shape: (batch_size, 3, height, width) i.e. (batch_size, 3, 224, 398)
+                joints (torch.Tensor): Input joints. Shape: (batch_size, num_joints) i.e. (batch_size, 6)
+                labels (torch.Tensor): Input labels. NOT USED.
+
+        Returns:
+            torch.Tensor: Loss of the model
+        """
         x_frames, x_joints, _ = batch
         x_frames = rearrange(x_frames, 'n l c h w -> l n c h w')
         x_joints = rearrange(x_joints, 'n l c -> l n c', c=self.num_joints)
@@ -252,11 +294,14 @@ class LstmAutoencoder(LightningModule):
         """Predicts the last frame given the all but the last frames.
 
         Args:
-            batch (torch.Tensor): Input frames. Shape: (N, L, C, H, W) i.e. (batch_size, seq_length, 3, 224, 398)
+            batch (tuple): Tuple of (frames, joints, labels)
+                frames (torch.Tensor): Input frames. Shape: (batch_size, 3, height, width) i.e. (batch_size, 3, 224, 398)
+                joints (torch.Tensor): Input joints. Shape: (batch_size, num_joints) i.e. (batch_size, 6)
+                labels (torch.Tensor): Input labels. NOT USED.
 
         Returns:
-            torch.Tensor: Predicted frames. Shape: (N, C, H, W) i.e. (batch_size, 3, 224, 398)
-            torch.Tensor: Predicted joints. Shape: (N, J) Only if use_joints is True
+            torch.Tensor: Predicted frames. Shape: (batch_size, 3, height, width) i.e. (batch_size, 3, 224, 398)
+            torch.Tensor: Predicted joints. Shape: (batch_size, num_joints) (Only if use_joints is True)
         """
         x_frames, x_joints, _ = batch
         x_frames = rearrange(x_frames, 'n l c h w -> l n c h w')

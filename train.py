@@ -77,6 +77,8 @@ def load_config(config_path, debug=False):
     config["exclusive_colors"] = dataset.get("exclusive_colors", default["dataset"]["exclusive_colors"])
     config["different_actions"] = dataset.get("different_actions", default["dataset"]["different_actions"])
     config["num_joints"] = dataset.get("num_joints", default["dataset"]["num_joints"])
+    config["sentence_length"] = dataset.get("sentence_length", default["dataset"]["sentence_length"])
+    config["dictionary_size"] = dataset.get("dictionary_size", default["dataset"]["dictionary_size"])
 
     if debug:
         config["num_training_samples"] = 10

@@ -29,6 +29,8 @@
         "different_objects": 4,
         "exclusive_colors": true,
         "different_actions": 4,
-        "num_joints": 6
+        "num_joints": 6,
+        "sentence_length": 3,
+        "dictionary_size": 19
     }
 }
