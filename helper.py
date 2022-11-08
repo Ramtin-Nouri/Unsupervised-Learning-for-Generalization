@@ -19,6 +19,6 @@ def print_fail(text):
     print_color(text, "fail")
 
 def print_with_time(string):
-    print(f"{datetime.now().strftime('%d-%m-%Y %H:%M:%S')} : {str(string)}\n")
+    print_color(f"{datetime.now().strftime('%d-%m-%Y %H:%M:%S')} : {str(string)}\n", "green")
 # ------------------------------------------------------------------------------
 

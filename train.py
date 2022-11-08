@@ -26,6 +26,9 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/default.json", required=True)
     parser.add_argument("--debug", type=bool, default=False)
+    parser.add_argument("--mode", type=str, default="both", required=True, help="supervised, unsupervised or both")
+    parser.add_argument("--unsupervised_model", type=str, default=None, help="path to unsupervised model. Has to be specified if mode is supervised")
+
     return parser.parse_args()
 
 def load_config(config_path, debug=False):
@@ -159,23 +162,45 @@ def train_unsupervised(config, wandb_logger):
         wandb_logger.log_image(key=f"test_image", step=i, images=[pred, target], caption=["prediction", "target"])
         i += 1
 
-    #TODO: load best model instead of last
+    best = load_unsupervised_model(unsupervised_checkpt.best_model_path)
+    return best
+
+def load_unsupervised_model(model_path):
+    """Load the unsupervised model.
+    Because the config is edited during training, we need to load the config from the model path and reset its changes.
+    TODO: let the models work on copies instead of changing the config.
+
+    Args:
+        model_path (str): Path to the model.
+
+    Returns:
+        LstmAutoencoder: Loaded unsupervised model.
+    """
+    # Load model
+    model_ckpt = torch.load(model_path)
+    saved_config = model_ckpt["hyper_parameters"]["config"]
+    for key in saved_config:
+        if "layers" in key and not "num_layers" in key:
+            saved_config[key] = saved_config[key][1:] # Remove the added first layer
+
+    unsupervised_model = LstmAutoencoder(saved_config)
+    unsupervised_model.load_state_dict(model_ckpt["state_dict"])
     return unsupervised_model
 
-def train_supervised(config, wandb_logger, unsupervised_model):
+def train_supervised(config, wandb_logger, encoder):
     """Train the supervised model.
 
     Args:
         config (dict): Configuration dictionary.
         wandb_logger (WandbLogger): WandB logger.
-        unsupervised_model (LstmAutoencoder): Trained unsupervised model.
+        encoder (LstmAutoencoder): Trained unsupervised model.
 
     Returns:
         LstmAutoencoder: Trained supervised model.
         datamodule (DataModule): Supervised datamodule.
     """
     supervised_datamodule = dataset.DataModule(config, False)
-    supervised_model = LstmClassifier(config, unsupervised_model)
+    supervised_model = LstmClassifier(config, encoder)
     print("Supervised model:", supervised_model)
     wandb_logger.watch(supervised_model, log="all")
 
@@ -198,9 +223,31 @@ def train_supervised(config, wandb_logger, unsupervised_model):
         check_val_every_n_epoch=1
     )
     supervised_trainer.fit(supervised_model, datamodule=supervised_datamodule)
-    #best = supervised_model.load_from_checkpoint(supervised_checkpt.best_model_path)
-    # TODO: load best model instead of last
-    return supervised_model,supervised_datamodule
+
+    best = load_supervised_model(supervised_checkpt.best_model_path, encoder=encoder)
+    return best,supervised_datamodule
+
+def load_supervised_model(model_path, encoder):
+    """Load the supervised model.
+    Because the config is edited during training, we need to load the config from the model path and reset its changes.
+    TODO: let the models work on copies instead of changing the config.
+
+    Args:
+        model_path (str): Path to the model.
+
+    Returns:
+        LstmClassifier: Loaded unsupervised model.
+    """
+    # Load model
+    model_ckpt = torch.load(model_path)
+    saved_config = model_ckpt["hyper_parameters"]["config"]
+    for key in saved_config:
+        if "layers" in key and not "num_layers" in key:
+            saved_config[key] = saved_config[key][1:] # Remove the added first layer
+
+    supervised_model = LstmClassifier(saved_config, encoder)
+    supervised_model.load_state_dict(model_ckpt["state_dict"])
+    return supervised_model
 
 def test_supervised(config, wandb_logger, model, datamodule):
     """Test the supervised model.
@@ -430,8 +477,18 @@ def main(args):
     )
     wandb_logger.experiment.config.update(config)
 
-    # First Train Unsupervised model
-    unsupervised_model = train_unsupervised(config, wandb_logger)
+    if args.mode == "supervised":
+        if args.unsupervised_model is None:
+            print_fail("If mode is supervised, you must provide a path to an unsupervised model.")
+            exit(1)
+        unsupervised_model = load_unsupervised_model(args.unsupervised_model)
+    else:
+        # First Train Unsupervised model
+        unsupervised_model = train_unsupervised(config, wandb_logger)
+
+    if args.mode == "unsupervised":
+        print_with_time("Unsupervised training finished.")
+        return
 
     # Use the trained model to get the latent space, dismiss its decoder
     unsupervised_model = unsupervised_model.encoder
