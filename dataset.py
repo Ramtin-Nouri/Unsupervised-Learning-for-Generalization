@@ -199,14 +199,11 @@ class DataModule(LightningDataModule):
         self.config = config
         self.unsupervised = unsupervised
         
-        # TODO: caluculate new mean and std
         dataset_mean = [0.7605, 0.7042, 0.6045]
         dataset_std = [0.1832, 0.2083, 0.2902]
-
-        # TODO: caluculate new mean and std
         normal_transform = transforms.Normalize(mean=dataset_mean, std=dataset_std)
-
         self.transform = normal_transform
+        
         self.train_loader = None
         self.val_loader = None
 

@@ -308,20 +308,13 @@ def test_supervised(config, wandb_logger, model, datamodule):
     cf_matrices_absolute = np.zeros((6, 19, 19))
     cf_matrices_absolute_gen = np.zeros((6, 19, 19))
 
-    #TODO delete duplicate (dataset)
     dataset_mean = [0.7605, 0.7042, 0.6045]
     dataset_std = [0.1832, 0.2083, 0.2902]
-
-    torchvision_mean = [0.485, 0.456, 0.406]
-    torchvision_std = [0.229, 0.224, 0.225]
-
     normal_transform = transforms.Normalize(mean=dataset_mean, std=dataset_std)
-    torchvision_transform = transforms.Normalize(mean=torchvision_mean, std=torchvision_std)
-    if False: #TODO
-        transform = torchvision_transform
-    else:
-        transform = normal_transform
+    transform = normal_transform
 
+    sentence_wise_accuracies_constant = []
+    sentence_wise_accuracies_gen = []
     num_samples = 10 if config["debug"] else 2000
     for i in range(1, 7):
         test_data = dataset.MultimodalSimulation(path=config["data_path"],
@@ -358,6 +351,9 @@ def test_supervised(config, wandb_logger, model, datamodule):
 
         confusion_matrix_absolute, wrong_predictions, sentence_wise_accuracy = get_evaluation(model, test_loader, device, f"V{i} test")
         confusion_matrix_absolute_gen, wrong_predictions_gen, sentence_wise_accuracy_gen = get_evaluation(model, gen_test_loader, device, f"V{i} generalization test")
+
+        sentence_wise_accuracies_constant.append(sentence_wise_accuracy)
+        sentence_wise_accuracies_gen.append(sentence_wise_accuracy_gen)
 
         confusion_matrix_relative = get_relative_confusion_matrix(confusion_matrix_absolute)
         confusion_matrix_relative_gen = get_relative_confusion_matrix(confusion_matrix_absolute_gen)
@@ -435,12 +431,14 @@ def test_supervised(config, wandb_logger, model, datamodule):
         cf_matrices_absolute_gen[:, 4:13, 4:13])
 
     wandb_logger.log_metrics({"test_accuracy": test_accuracy,
+                "test_sentence_wise_accuracy": sum(sentence_wise_accuracies_constant) / len(sentence_wise_accuracies_constant),
                 "test_action_accuracy": test_action_accuracy,
                 "test_color_accuracy": test_color_accuracy,
                 "test_object_accuracy": test_object_accuracy})
     print_with_time(f"Test accuracy: {test_accuracy:8.4f}%")
 
     wandb_logger.log_metrics({"generalization_test_accuracy": gen_test_accuracy,
+                "generalization_test_sentence_wise_accuracy": sum(sentence_wise_accuracies_gen)/len(sentence_wise_accuracies_gen),
                 "generalization_test_action_accuracy": gen_test_action_accuracy,
                 "generalization_test_color_accuracy": gen_test_color_accuracy,
                 "generalization_test_object_accuracy": gen_test_object_accuracy})
