@@ -1,23 +1,22 @@
 {
     "gpus": 1,
     "epochs": 10,
-    "batch_size": 2,
+    "batch_size": 1,
     "num_workers": 8,
-    "input_length": 14,
-    "input_stride": 1,
-    "use_joints": true,
-    "output_dir": "output",
-    "learning_rate": 0.001,
-    "pretrained": true,
+    "input_length": 15,
+    "unsupervised_epochs": 10,
+
+    "use_joints": false,
+    "convolution_layers_encoder":[16,32,64,64],
+    "dense_layers_encoder":[64,64],
+    "convolution_layers_decoder":[64,32,16,8],
+    "dense_layers_decoder":[64,64],
+    "lstm_num_layers": 1,
+    "lstm_hidden_size": 512,
     "dataset":{
-        "data_path": "dataset/",
         "num_training_samples": 5000,
         "num_validation_samples": 2500,
-        "visible_objects": 1,
-        "different_colors": 1,
-        "different_objects": 4,
-        "exclusive_colors": true,
-        "different_actions": 4,
-        "num_joints": 6
+        "num_training_samples_unsupervised": 400,
+        "num_validation_samples_unsupervised": 100
     }
 }

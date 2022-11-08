@@ -1,0 +1,16 @@
+{
+    "gpus": 1,
+    "epochs": 10,
+    "unsupervised_epochs": 100,
+    "batch_size": 2,
+    "num_workers": 8,
+    "input_length": 10,
+    "use_joints": true,
+
+    "convolution_layers_encoder":[8,16,32],
+    "dense_layers_encoder":[32,16],
+    "convolution_layers_decoder":[32,16,8,4],
+    "dense_layers_decoder":[16,32],
+    "lstm_num_layers": 4,
+    "lstm_hidden_size": 32
+}

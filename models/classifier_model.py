@@ -2,83 +2,95 @@ import torch
 from torch import nn
 from einops import rearrange
 from collections import OrderedDict
-from models.rnn_encoder_decoder import LstmEncoder, LstmDecoder
-from models.torchvision_models import ResNet18
+from models.lstm_autoencoder import LstmEncoder
 from pytorch_lightning import LightningModule
 from helper import *
 
 
-class EncoderDecoder(LightningModule):
-    def __init__(self, config):
-        """vision_architecture, pretrained_vision, seq2seq_architecture, dropout1=0.0, dropout2=0.0,
-            image_features=256, hidden_dim=512, freeze=False, convolutional_features=1024,
-            no_joints=False, dropout3=0.0):"""
+class ClassificationLstmDecoder(LightningModule):
+    """ Decoder of the LSTM model for classification. """
+    def __init__(self, config, output_size):
+        super().__init__()
+        self.hidden_size = config["lstm_hidden_size"]
+        self.num_layers=config["lstm_num_layers"]
+        self.sentence_length = 3 # TODO: dont hardcode
+        self.label_size = 19 #TODO: remove hard coded value
+
+        self.lstm = nn.LSTM(input_size=self.hidden_size, hidden_size=self.hidden_size,
+                            num_layers=self.num_layers, batch_first=True)
+        self.linear = nn.Linear(self.hidden_size, output_size)
+
+    def forward(self, hidden, x):
+        pred = torch.zeros((x.shape[0], self.sentence_length, self.label_size), device=x.device)
+        for i in range(self.sentence_length):
+            lstm_out, hidden = self.lstm(x, hidden)
+            linear_out = self.linear(lstm_out)
+            pred[:, i, :] = linear_out.squeeze(1)
+            
+        return pred
+        
+    def init_hidden(self, batch_size, device):
+        # Initialize the hidden state of the LSTM
+        return  (torch.zeros((self.num_layers, batch_size, self.hidden_size), device=device),
+                torch.zeros((self.num_layers, batch_size, self.hidden_size), device=device))
+
+class LstmClassifier(LightningModule):
+    """ LSTM model for classification. 
+
+    Args:
+        config (dict): Dictionary containing the configuration parameters.
+        encoder (LstmEncoder): Trained encoder part of the LstmAutoencoder model.
+    """
+    def __init__(self, config, encoder):
         super().__init__()
         self.save_hyperparameters()
 
-        LABEL_SIZE = 19
+        self.label_size = 19 #TODO: remove hard coded value
         self.use_joints = config["use_joints"]
-        JOINTS_SIZE = 6 if self.use_joints else 0
-
         self.learning_rate = config["learning_rate"]
-        # TODO: hardcode because will be replaced anyway:
-        convolutional_features = 1024
-        image_features = 256
-        dropout1 = 0.0
-        dropout2 = 0.0
-        dropout3 = 0.0
-        hidden_dim = 512
-        freeze = False
+        self.num_joints = config["num_joints"]
 
-        self.vision_model = ResNet18(pretrained=config["pretrained"],
-                                        convolutional_features=convolutional_features, out_features=image_features,
-                                        dropout1=dropout1, dropout2=dropout2, freeze=freeze)
-
-        self.encoder = LstmEncoder(input_size=image_features + JOINTS_SIZE, hidden_size=hidden_dim)
-        self.decoder = LstmDecoder(input_size=LABEL_SIZE, hidden_size=hidden_dim, dropout=dropout3)
+        self.encoder = encoder
+        self.encoder.requires_frad = False
+        self.decoder = ClassificationLstmDecoder(output_size=self.label_size, config=config)
 
         self.loss_fn = nn.CrossEntropyLoss()
         self.reset_metrics_train()
         self.reset_metrics_val()
         
-    def forward(self, frames, joints):
-        # input:
-        # images shape : (N, L, 3, 224, 398)
-        #   if precooked -> (N, L, conv_features)
-        # joints shape : (N, L, 6)
-        #
-        # ouput:
-        # output shape : (N, Lout), Lout = 3
+    def forward(self, x_frames, x_joints=None):
+        """ Forward pass of the model.
 
-        N = frames.shape[0]  # batch size
-        L = frames.shape[1]  # sequence length
-        Lout = 3  # length of output sequence
-        t = 19  # token size
+        Args:
+            x_frames (torch.Tensor): Tensor containing the frames of the video. Shape: (batch_size, num_frames, 3, 224, 398)
+            x_joints (torch.Tensor): Tensor containing the joints of the video. Shape: (batch_size, num_frames, num_joints, 3)
 
-        # forward pass
-        frames = rearrange(frames, 'N L c w h -> (N L) c w h')
+        Returns:
+            torch.Tensor: Output of the model. Shape: (batch_size, Lout, label_size) i.e. (batch_size, 3, label_size)
+        """
+        N = x_frames.shape[0]  # batch size
+        L = x_frames.shape[1]  # sequence length
 
-        frames_features = self.vision_model(frames)  # shape : (N L) feature_dim
-
-        frames_features = rearrange(frames_features, '(N L) f -> N L f', N=N, L=L)
+        # encode frames
+        x_frames = rearrange(x_frames, 'N L c w h -> L N c w h')
+        hidden = self.encoder.init_hidden(N, x_frames.device)
 
         if self.use_joints:
-            sequence_input = torch.cat((frames_features, joints), dim=2)  # shape : (N, L, f+j)
+            if x_joints is None:
+                print_warning("Using joints but no joints given")
+                x_joints = torch.zeros((L, N, self.num_joints), device=x_frames.device)
+            else:
+                x_joints = rearrange(x_joints, 'n l c -> l n c', c=self.num_joints)
+
+            for i in range(L):
+                encoder_out, hidden = self.encoder(hidden, x_frames[i], x_joints[i])
         else:
-            sequence_input = frames_features  # shape : (N, L, f)
+            for i in range(L):
+                encoder_out, hidden = self.encoder(hidden, x_frames[i])
 
-        lstm_out, hidden = self.encoder(sequence_input)
-
-        decoder_input = torch.zeros((N, t), device=frames.device)  # initial decoder input
-        output = torch.zeros((N, Lout, t), device=frames.device)
-
-        for i in range(Lout):
-            # output shape : (N, input_size)
-            decoder_output, hidden = self.decoder(decoder_input, hidden)
-            output[:, i, :] = decoder_output
-            decoder_input = decoder_output
-
-        return output
+        # decode
+        decoder_out = self.decoder(hidden=hidden, x=encoder_out)
+        return decoder_out
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
@@ -92,7 +104,10 @@ class EncoderDecoder(LightningModule):
 
     def training_step(self, batch, batch_idx):
         frames, joints, labels = batch
-        output = self(frames, joints)
+        if self.use_joints:
+            output = self(frames, joints)
+        else:
+            output = self(frames)
         loss = self.loss(output, labels)
         self.log('train_loss', loss)
         self.calculate_accuracy(output, labels, train=True)
@@ -102,7 +117,7 @@ class EncoderDecoder(LightningModule):
         epoch_action_acc = self.training_action_correct * 100 / self.training_total
         epoch_color_acc = self.training_color_correct * 100 / self.training_total
         epoch_object_acc = self.training_object_correct * 100 / self.training_total
-        epoch_acc = (self.training_action_correct + self.training_color_correct + self.training_object_correct) / 3
+        epoch_acc = (epoch_action_acc + epoch_color_acc + epoch_object_acc) / 3
         self.log('train_acc_action', epoch_action_acc, on_step=False, on_epoch=True)
         self.log('train_acc_color', epoch_color_acc, on_step=False, on_epoch=True)
         self.log('train_acc_object', epoch_object_acc, on_step=False, on_epoch=True)
@@ -112,7 +127,10 @@ class EncoderDecoder(LightningModule):
     
     def validation_step(self, batch, batch_idx):
         frames, joints, labels = batch
-        output = self(frames, joints)
+        if self.use_joints:
+            output = self(frames, joints)
+        else:
+            output = self(frames)
         loss = self.loss(output, labels)
         self.log('val_loss', loss)
         self.calculate_accuracy(output, labels, train=False)

@@ -9,15 +9,26 @@ from datetime import datetime
 import json
 import os
 import dataset
-from models.meta_models import EncoderDecoder
+from models.classifier_model import LstmClassifier
+from models.lstm_autoencoder import LstmAutoencoder
 from helper import *
 from evaluation import *
 
 def parse_args():
-    """Parse command line arguments."""
+    """Parse command line arguments.
+    Namely the config file and debug mode.
+    Config file is a json file with all the parameters.
+    Debug mode is a boolean that determines if the code is run in debug mode. By default it is False.
+
+    Returns:
+        argparse.Namespace: Parsed arguments.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/default.json", required=True)
     parser.add_argument("--debug", type=bool, default=False)
+    parser.add_argument("--mode", type=str, default="both", required=True, help="supervised, unsupervised or both")
+    parser.add_argument("--unsupervised_model", type=str, default=None, help="path to unsupervised model. Has to be specified if mode is supervised")
+
     return parser.parse_args()
 
 def load_config(config_path, debug=False):
@@ -35,20 +46,31 @@ def load_config(config_path, debug=False):
     config = dict(
         gpus=config_file.get("gpus", default["gpus"]),
         epochs=config_file.get("epochs", default["epochs"]),
+        unsupervised_epochs=config_file.get("unsupervised_epochs", default["unsupervised_epochs"]),
         batch_size=config_file.get("batch_size", default["batch_size"]),
         num_workers=config_file.get("num_workers", default["num_workers"]),
         input_length=config_file.get("input_length", default["input_length"]),
+        init_length=config_file.get("init_length", default["init_length"]),
         input_stride=config_file.get("input_stride", default["input_stride"]),
         use_joints=config_file.get("use_joints", default["use_joints"]),
         output_dir=config_file.get("output_dir", default["output_dir"]),
         learning_rate=config_file.get("learning_rate", default["learning_rate"]),
-        pretrained = config_file.get("pretrained", default["pretrained"]),
+        convolution_layers_encoder=config_file.get("convolution_layers_encoder", default["convolution_layers_encoder"]),
+        convolution_layers_decoder=config_file.get("convolution_layers_decoder", default["convolution_layers_decoder"]),
+        dense_layers_encoder=config_file.get("dense_layers_encoder", default["dense_layers_encoder"]),
+        dense_layers_decoder=config_file.get("dense_layers_decoder", default["dense_layers_decoder"]),
+        lstm_num_layers=config_file.get("lstm_num_layers", default["lstm_num_layers"]),
+        lstm_hidden_size=config_file.get("lstm_hidden_size", default["lstm_hidden_size"]),
     )
     # dataset related configs
     dataset = config_file.get("dataset", default["dataset"])
+    config["width"] = dataset.get("width", default["dataset"]["width"])
+    config["height"] = dataset.get("height", default["dataset"]["height"])
     config["data_path"] = dataset.get("data_path", default["dataset"]["data_path"])
     config["num_training_samples"] = dataset.get("num_training_samples", default["dataset"]["num_training_samples"])
     config["num_validation_samples"] = dataset.get("num_validation_samples", default["dataset"]["num_validation_samples"])
+    config["num_training_samples_unsupervised"] = dataset.get("num_training_samples_unsupervised", default["dataset"]["num_training_samples_unsupervised"])
+    config["num_validation_samples_unsupervised"] = dataset.get("num_validation_samples_unsupervised", default["dataset"]["num_validation_samples_unsupervised"])
     config["visible_objects"] = dataset.get("visible_objects", default["dataset"]["visible_objects"])
     config["different_colors"] = dataset.get("different_colors", default["dataset"]["different_colors"])
     config["different_objects"] = dataset.get("different_objects", default["dataset"]["different_objects"])
@@ -57,9 +79,12 @@ def load_config(config_path, debug=False):
     config["num_joints"] = dataset.get("num_joints", default["dataset"]["num_joints"])
 
     if debug:
-        config["num_training_samples"] = 20
-        config["num_validation_samples"] = 20
+        config["num_training_samples"] = 10
+        config["num_validation_samples"] = 10
+        config["num_training_samples_unsupervised"] = 5
+        config["num_validation_samples_unsupervised"] = 5
         config["epochs"] = 1
+        config["unsupervised_epochs"] = 1
     config["debug"] = debug
     os.makedirs(config["output_dir"], exist_ok=True)
 
@@ -92,53 +117,132 @@ def load_config(config_path, debug=False):
     
     return config
 
-def main(args):
-    pl.seed_everything(42, workers=True) # for reproducibility
-    config = load_config(args.config, args.debug)
-    print("Config:", config)
+def train_unsupervised(config, wandb_logger):
+    """Train the unsupervised model.
 
-    datamodule = dataset.DataModule(config)
+    Args:
+        config (dict): Configuration dictionary.
+        wandb_logger (WandbLogger): WandB logger.
 
-    model = EncoderDecoder(config)
-    
-    wandb_logger = WandbLogger(
-        project=config["wandb_project"],
-        name=config["run_name"],
-        save_dir=config["output_dir"],
-        anonymous="allow",
+    Returns:
+        LstmAutoencoder: Trained unsupervised model.
+    """
+    unsupervised_datamodule = dataset.DataModule(config, True)
+    unsupervised_model = LstmAutoencoder(config)
+    print("Unsupervised model:", unsupervised_model)
+    wandb_logger.watch(unsupervised_model, log="all")
+
+    unsupervised_checkpt = pl.callbacks.ModelCheckpoint(
+        dirpath=config["model_path"],
+        save_top_k=1,
+        save_weights_only=True,
+        verbose=True,
+        monitor="val_loss",
+        mode="min",
+        filename='unsupervised_{epoch}-{val_loss:.2f}'
     )
-    wandb_logger.watch(model, log="all")
 
-    modelCheckpoint = pl.callbacks.ModelCheckpoint(
+    unsupervised_trainer = pl.Trainer(
+        accelerator="gpu",
+        devices=config["gpus"],
+        max_epochs=config["unsupervised_epochs"],
+        logger=wandb_logger,
+        callbacks=[unsupervised_checkpt],
+        log_every_n_steps=1,
+        check_val_every_n_epoch=1
+    )
+    unsupervised_trainer.fit(unsupervised_model, datamodule=unsupervised_datamodule)
+    # Log test images
+    i = 0
+    for batch in unsupervised_datamodule.test_dataloader(): #batch_size = 1
+        pred = unsupervised_model.predict(batch)
+        if config["use_joints"]:
+            pred = pred[0]
+        target = batch[0][0][-1]
+        wandb_logger.log_image(key=f"test_image", step=i, images=[pred, target], caption=["prediction", "target"])
+        i += 1
+
+    best = load_model(unsupervised_checkpt.best_model_path, is_unsupervised=True)
+    return best
+
+def load_model(model_path, is_unsupervised, encoder=None):
+    """Load the model.
+
+    Args:
+        model_path (str): Path to the model.
+        is_unsupervised (bool): Whether the model is unsupervised.
+
+    Returns:
+        LstmClassifier or LstmAutoencoder: Loaded model.
+    """
+    # Load model
+    model_ckpt = torch.load(model_path)
+    saved_config = model_ckpt["hyper_parameters"]["config"]
+    for key in saved_config:
+        if "layers" in key and not "num_layers" in key:
+            saved_config[key] = saved_config[key][1:] # Remove the added first layer
+
+    if is_unsupervised:
+        model = LstmAutoencoder(saved_config)
+    else:
+        model = LstmClassifier(saved_config, encoder)
+    model.load_state_dict(model_ckpt["state_dict"])
+    return model
+
+def train_supervised(config, wandb_logger, encoder):
+    """Train the supervised model.
+
+    Args:
+        config (dict): Configuration dictionary.
+        wandb_logger (WandbLogger): WandB logger.
+        encoder (LstmAutoencoder): Trained unsupervised model.
+
+    Returns:
+        LstmAutoencoder: Trained supervised model.
+        datamodule (DataModule): Supervised datamodule.
+    """
+    supervised_datamodule = dataset.DataModule(config, False)
+    supervised_model = LstmClassifier(config, encoder)
+    print("Supervised model:", supervised_model)
+    wandb_logger.watch(supervised_model, log="all")
+
+    supervised_checkpt = pl.callbacks.ModelCheckpoint(
         dirpath=config["model_path"],
         save_top_k=1,
         verbose=True,
         monitor="val_loss",
         mode="min",
-        filename='{epoch}-{val_loss:.2f}'
+        filename='supervised_{epoch}-{val_loss:.2f}'
     )
 
-    trainer = pl.Trainer(
-        gpus=config["gpus"],
+    supervised_trainer = pl.Trainer(
+        accelerator="gpu",
+        devices=config["gpus"],
         max_epochs=config["epochs"],
         logger=wandb_logger,
-        callbacks=[modelCheckpoint],
+        callbacks=[supervised_checkpt],
         log_every_n_steps=1,
         check_val_every_n_epoch=1
     )
+    supervised_trainer.fit(supervised_model, datamodule=supervised_datamodule)
 
-    wandb_logger.experiment.config.update(config)
+    best = load_model(supervised_checkpt.best_model_path, is_unsupervised=False, encoder=encoder)
+    return best,supervised_datamodule
 
-    trainer.fit(model, datamodule=datamodule)
 
-    # Load best model
-    model = model.load_from_checkpoint(modelCheckpoint.best_model_path)
+def test_supervised(config, wandb_logger, model, datamodule):
+    """Test the supervised model.
 
+    Args:
+        config (dict): Configuration dictionary.
+        wandb_logger (WandbLogger): WandB logger.
+        model (LstmClassifier): Trained supervised model.
+        datamodule (DataModule): DataModule.
+    """
     # ugly compatibility stuff
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # TODO: avoid passing device, use pytorch lightning
     model.to(device)
 
-    #TODO: test and create confusion matrix
     train_confusion_matrix_absolute, final_train_wrong_predictions, final_train_sentence_wise_accuracy = get_evaluation(
         model, datamodule.train_dataloader(),
         device,
@@ -211,12 +315,12 @@ def main(args):
 
     normal_transform = transforms.Normalize(mean=dataset_mean, std=dataset_std)
     torchvision_transform = transforms.Normalize(mean=torchvision_mean, std=torchvision_std)
-    if config["pretrained"]:
+    if False: #TODO
         transform = torchvision_transform
     else:
         transform = normal_transform
 
-    #TODO can we move this to the datamodule?
+    num_samples = 10 if config["debug"] else 2000
     for i in range(1, 7):
         test_data = dataset.MultimodalSimulation(path=config["data_path"],
                                             visible_objects=i,
@@ -225,7 +329,7 @@ def main(args):
                                             different_objects=config["different_objects"],
                                             exclusive_colors=config["exclusive_colors"],
                                             part="constant-test",
-                                            num_samples=2000,
+                                            num_samples=num_samples,
                                             input_length=config["input_length"],
                                             frame_stride=config["input_stride"],
                                             transform=transform,
@@ -238,7 +342,7 @@ def main(args):
                                                 different_objects=config["different_objects"],
                                                 exclusive_colors=config["exclusive_colors"],
                                                 part="generalization-test",
-                                                num_samples=2000,
+                                                num_samples=num_samples,
                                                 input_length=config["input_length"],
                                                 frame_stride=config["input_stride"],
                                                 transform=transform,
@@ -339,6 +443,41 @@ def main(args):
                 "generalization_test_color_accuracy": gen_test_color_accuracy,
                 "generalization_test_object_accuracy": gen_test_object_accuracy})
     print_with_time(f"Generalization test accuracy: {gen_test_accuracy:8.4f}%")
+
+
+def main(args):
+    pl.seed_everything(42, workers=True) # for reproducibility
+    config = load_config(args.config, args.debug)
+    print("Config:", config)
+
+    wandb_logger = WandbLogger(
+        project=config["wandb_project"],
+        name=config["run_name"],
+        save_dir=config["output_dir"],
+        anonymous="allow",
+    )
+    wandb_logger.experiment.config.update(config)
+
+    if args.mode == "supervised":
+        if args.unsupervised_model is None:
+            print_fail("If mode is supervised, you must provide a path to an unsupervised model.")
+            exit(1)
+        unsupervised_model = load_unsupervised_model(args.unsupervised_model)
+    else:
+        # First Train Unsupervised model
+        unsupervised_model = train_unsupervised(config, wandb_logger)
+
+    if args.mode == "unsupervised":
+        print_with_time("Unsupervised training finished.")
+        return
+
+    # Use the trained model to get the latent space, dismiss its decoder
+    unsupervised_model = unsupervised_model.encoder
+
+    # Train supervised model
+    supervised_model, supervised_data = train_supervised(config, wandb_logger, unsupervised_model)
+
+    test_supervised(config, wandb_logger, supervised_model, supervised_data)
 
 
 if __name__ == "__main__":
