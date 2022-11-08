@@ -464,7 +464,7 @@ def main(args):
         if args.unsupervised_model is None:
             print_fail("If mode is supervised, you must provide a path to an unsupervised model.")
             exit(1)
-        unsupervised_model = load_unsupervised_model(args.unsupervised_model)
+        unsupervised_model = load_model(args.unsupervised_model, is_unsupervised=True)
     else:
         # First Train Unsupervised model
         unsupervised_model = train_unsupervised(config, wandb_logger)

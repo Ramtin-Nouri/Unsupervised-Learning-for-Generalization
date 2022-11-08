@@ -186,6 +186,14 @@ class MultimodalSimulation(Dataset):
         assert label.dtype == torch.uint8, f"label.dtype = {label.dtype} != torch.uint8"
 
 class DataModule(LightningDataModule):
+    """ DataModule for the MultimodelSimulation dataset.
+    For unsupervised data will concatenate all dataset configurations 
+    as well as provide some test data from the generalization test set and constant test set.
+
+    Args:
+        config (dict): configuration dictionary
+        unsupervised (bool): use unsupervised learning
+    """
     def __init__(self, config, unsupervised=False):
         super().__init__()
         self.config = config
@@ -206,6 +214,7 @@ class DataModule(LightningDataModule):
         pass
 
     def setup(self, stage=None):
+        """ Setup the train, val and test datasets."""
         if self.unsupervised:
             # For unsupervised training we use the whole dataset
             train_datasets=[]
@@ -313,11 +322,14 @@ class DataModule(LightningDataModule):
                                 num_workers=self.config["num_workers"])
 
     def train_dataloader(self):
+        """ Return the train dataloader."""
         return self.train_loader
 
     def val_dataloader(self):
+        """ Return the validation dataloader."""
         return self.val_loader
     
     def test_dataloader(self):
+        """ Return the test dataloader."""
         return self.test_loader
 

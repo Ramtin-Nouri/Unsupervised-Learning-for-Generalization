@@ -5,7 +5,15 @@ from matplotlib import pyplot as plt
 
 
 def get_relative_confusion_matrix(confusion_matrix):
-    # confusion_matrix_relative = confusion_matrix / np.sum(confusion_matrix, axis=1)
+    """ Returns the confusion matrix with the values relative to the total number of predictions for each class. 
+     confusion_matrix_relative = confusion_matrix / np.sum(confusion_matrix, axis=1)
+    
+    Args:
+        confusion_matrix (np.array): The confusion matrix with the absolute values.
+        
+    Returns:
+        np.array: The confusion matrix with the values relative to the total number of predictions for each class.
+    """
     confusion_matrix_relative = np.zeros_like(confusion_matrix)
     for i in range(confusion_matrix.shape[0]):
         confusion_matrix_relative[i] = confusion_matrix[i] * 100 / np.sum(confusion_matrix[i]) if np.sum(
@@ -14,7 +22,14 @@ def get_relative_confusion_matrix(confusion_matrix):
     return confusion_matrix_relative
 
 
-def create_confusion_matrix_plt(plot_matrix, title, save_path, floating):
+def create_confusion_matrix_plt(plot_matrix, title, floating):
+    """ Creates a confusion matrix plot.
+
+    Args:
+        plot_matrix (np.array): The confusion matrix.
+        title (str): The title of the plot.
+        floating (bool): If True the values are floating point numbers, otherwise integers (percentage).
+    """
     dictionary = ["put down", "picked up", "pushed left", "pushed right",
                   "apple", "banana", "cup", "football", "book", "pylon", "bottle", "star", "ring",
                   "red", "green", "blue", "yellow", "white", "brown"]
@@ -40,20 +55,27 @@ def create_confusion_matrix_plt(plot_matrix, title, save_path, floating):
                            ha="center", va="center", color="w" if plot_matrix[i, j] < np.max(plot_matrix) / 2 else "0")
 
     ax.set_title(title)
-    # plt.figtext(0.1, 0.5, 'Tatsächlich', horizontalalignment='center', va="center", rotation=90)
-    # plt.figtext(0.5, 0.01, 'Vorhersage', horizontalalignment='center')
     plt.ylabel("Actual")
     plt.xlabel("Predicted")
     fig.tight_layout()
     fig.set_size_inches(24, 18)
     fig.tight_layout()
-    # Path(save_path).mkdir(exist_ok=True)
-    # plt.savefig(f"{save_path}{title}.png", dpi=100, bbox_inches='tight')
-
     return plt
 
 
 def get_evaluation(model, data_loader, device, description=""):
+    """ Evaluates the model on the given data loader.
+
+    Args:
+        model (torch.nn.Module): The model to evaluate.
+        data_loader (torch.utils.data.DataLoader): The data loader to evaluate on.
+        device (torch.device): The device to use.
+        description (str): The description of what is evaluated.
+
+    Returns:
+        float: The accuracy.
+        np.array: The confusion matrix.
+    """
     dictionary = ["put down", "picked up", "pushed left", "pushed right",
                   "apple", "banana", "cup", "football", "book", "pylon", "bottle", "star", "ring",
                   "red", "green", "blue", "yellow", "white", "brown"]
