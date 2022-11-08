@@ -162,19 +162,18 @@ def train_unsupervised(config, wandb_logger):
         wandb_logger.log_image(key=f"test_image", step=i, images=[pred, target], caption=["prediction", "target"])
         i += 1
 
-    best = load_unsupervised_model(unsupervised_checkpt.best_model_path)
+    best = load_model(unsupervised_checkpt.best_model_path, is_unsupervised=True)
     return best
 
-def load_unsupervised_model(model_path):
-    """Load the unsupervised model.
-    Because the config is edited during training, we need to load the config from the model path and reset its changes.
-    TODO: let the models work on copies instead of changing the config.
+def load_model(model_path, is_unsupervised, encoder=None):
+    """Load the model.
 
     Args:
         model_path (str): Path to the model.
+        is_unsupervised (bool): Whether the model is unsupervised.
 
     Returns:
-        LstmAutoencoder: Loaded unsupervised model.
+        LstmClassifier or LstmAutoencoder: Loaded model.
     """
     # Load model
     model_ckpt = torch.load(model_path)
@@ -183,9 +182,12 @@ def load_unsupervised_model(model_path):
         if "layers" in key and not "num_layers" in key:
             saved_config[key] = saved_config[key][1:] # Remove the added first layer
 
-    unsupervised_model = LstmAutoencoder(saved_config)
-    unsupervised_model.load_state_dict(model_ckpt["state_dict"])
-    return unsupervised_model
+    if is_unsupervised:
+        model = LstmAutoencoder(saved_config)
+    else:
+        model = LstmClassifier(saved_config, encoder)
+    model.load_state_dict(model_ckpt["state_dict"])
+    return model
 
 def train_supervised(config, wandb_logger, encoder):
     """Train the supervised model.
@@ -224,30 +226,9 @@ def train_supervised(config, wandb_logger, encoder):
     )
     supervised_trainer.fit(supervised_model, datamodule=supervised_datamodule)
 
-    best = load_supervised_model(supervised_checkpt.best_model_path, encoder=encoder)
+    best = load_model(supervised_checkpt.best_model_path, is_unsupervised=False, encoder=encoder)
     return best,supervised_datamodule
 
-def load_supervised_model(model_path, encoder):
-    """Load the supervised model.
-    Because the config is edited during training, we need to load the config from the model path and reset its changes.
-    TODO: let the models work on copies instead of changing the config.
-
-    Args:
-        model_path (str): Path to the model.
-
-    Returns:
-        LstmClassifier: Loaded unsupervised model.
-    """
-    # Load model
-    model_ckpt = torch.load(model_path)
-    saved_config = model_ckpt["hyper_parameters"]["config"]
-    for key in saved_config:
-        if "layers" in key and not "num_layers" in key:
-            saved_config[key] = saved_config[key][1:] # Remove the added first layer
-
-    supervised_model = LstmClassifier(saved_config, encoder)
-    supervised_model.load_state_dict(model_ckpt["state_dict"])
-    return supervised_model
 
 def test_supervised(config, wandb_logger, model, datamodule):
     """Test the supervised model.
