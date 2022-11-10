@@ -32,7 +32,7 @@ class LstmEncoder(LightningModule):
         self.use_joints = config["use_joints"]
         self.num_joints = config["num_joints"]
         in_chan = 3
-        nf = 8 #TODO: replace the previous configs with this one
+        nf = 16 #TODO: replace the previous configs with this one
 
         self.encoder_1_convlstm = ConvLSTMCell(input_dim=in_chan,
                                                hidden_dim=nf,
@@ -86,7 +86,7 @@ class CnnDecoder(LightningModule):
         self.use_joints = config["use_joints"]
         
         self.conv_layers = nn.Sequential(
-            nn.Conv2d(8, 32, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.Conv2d(32, 3, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
