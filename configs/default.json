@@ -11,10 +11,9 @@
     "output_dir": "output",
     "learning_rate": 0.01,
     "model":{
-        "convolution_layers_encoder":[32,64,128,256],
-        "dense_layers_encoder":[128,128],
+        "convlstm_features":64,
+        "convlstm_layers":2,
         "convolution_layers_decoder":[256,128,64,16],
-        "dense_layers_decoder":[128,128],
         "lstm_num_layers": 2,
         "lstm_hidden_size": 512
     },

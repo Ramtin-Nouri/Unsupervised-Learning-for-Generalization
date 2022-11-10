@@ -25,25 +25,21 @@ class LstmEncoder(LightningModule):
 
     def __init__(self, config):
         super().__init__()
-        conv_features = config["convolution_layers_encoder"]
-        assert type(conv_features) == int, "convolution_layers_encoder must be an integer. Usage of list is deprecated."
-        dense_features = config["dense_layers_encoder"] # TODO: implement dense layers
-        self.hidden_size = config["lstm_hidden_size"]
-        self.num_layers = config["lstm_num_layers"]
+        convlstm_features = config["convlstm_features"]
+        convlstm_layers = config["convlstm_layers"] # TODO: actually use this, atm only 2 layers are used
         self.use_joints = config["use_joints"]
-        self.num_joints = config["num_joints"]
         in_chan = 3
 
-        self.encoder_1_convlstm = ConvLSTMCell(input_dim=in_chan,
-                                               hidden_dim=conv_features,
+        self.convlstm_1 = ConvLSTMCell(input_dim=in_chan,
+                                               hidden_dim=convlstm_features,
                                                kernel_size=(3, 3),
                                                bias=True)
+        self.maxpool = nn.MaxPool3d(kernel_size=(1, 2, 2))
 
-        self.encoder_2_convlstm = ConvLSTMCell(input_dim=conv_features,
-                                               hidden_dim=conv_features,
+        self.convlstm_2 = ConvLSTMCell(input_dim=convlstm_features,
+                                               hidden_dim=convlstm_features,
                                                kernel_size=(3, 3),
                                                bias=True)
-
 
     def forward(self, x, h_t, c_t, h_t2, c_t2):
         """Forward pass of the encoder.
@@ -54,13 +50,16 @@ class LstmEncoder(LightningModule):
         seq_len = x.shape[1]
 
         for t in range(seq_len):
-            h_t, c_t = self.encoder_1_convlstm(input_tensor=x[:, t, :, :],
-                                               cur_state=[h_t, c_t]) 
-            h_t2, c_t2 = self.encoder_2_convlstm(input_tensor=h_t,
+            h_t, c_t = self.convlstm_1(input_tensor=x[:, t, :, :],
+                                               cur_state=[h_t, c_t])
+            h_t_pooled = self.maxpool(h_t)
+
+            h_t2, c_t2 = self.convlstm_2(input_tensor=h_t_pooled,
                                                  cur_state=[h_t2, c_t2]) 
 
+        h_t2_pooled = self.maxpool(h_t2)
         # encoder_vector
-        return h_t2
+        return h_t2_pooled
 
 class CnnDecoder(LightningModule):
     """Decoder of autoencoder.
@@ -80,13 +79,17 @@ class CnnDecoder(LightningModule):
         super().__init__()
         conv_features = config["convolution_layers_decoder"]
         # TODO: implement joints branch
-        input_shape = config["convolution_layers_encoder"]
+        input_shape = config["convlstm_features"]
         self.num_joints = config["num_joints"]
         self.use_joints = config["use_joints"]
+        w = config["width"]
+        h = config["height"]
         
         self.conv_layers = nn.Sequential(
+            nn.Upsample(size=(h//2,w//2), mode='nearest'),
             nn.Conv2d(input_shape, conv_features[0], kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
+            nn.Upsample(size=(h, w), mode='nearest'),
             nn.Conv2d(conv_features[0], 3, kernel_size=3, stride=1, padding=1)
         )# TODO: dont only consider 2 layers
 
@@ -150,8 +153,8 @@ class LstmAutoencoder(LightningModule):
         b, seq_len, _, h, w = x.size()
 
         # initialize hidden states
-        h_t, c_t = self.encoder.encoder_1_convlstm.init_hidden(batch_size=b, image_size=(h, w))
-        h_t2, c_t2 = self.encoder.encoder_2_convlstm.init_hidden(batch_size=b, image_size=(h, w))
+        h_t, c_t = self.encoder.convlstm_1.init_hidden(batch_size=b, image_size=(h, w))
+        h_t2, c_t2 = self.encoder.convlstm_2.init_hidden(batch_size=b, image_size=(h//2, w//2))
 
         # autoencoder forward
         encoder_vector = self.encoder(x, h_t, c_t, h_t2, c_t2)

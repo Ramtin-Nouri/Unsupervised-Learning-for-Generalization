@@ -7,11 +7,10 @@
     "input_length": 10,
     "use_joints": false,
     "model":{
-        "convolution_layers_encoder":4,
-        "dense_layers_encoder":[32,16],
-        "convolution_layers_decoder":[16,16,8,4],
-        "dense_layers_decoder":[16,32],
-        "lstm_num_layers": 4,
-        "lstm_hidden_size": 32
+        "convlstm_features":4,
+        "convlstm_layers":2,
+        "convolution_layers_decoder":[16],
+        "lstm_num_layers": 2,
+        "lstm_hidden_size": 512
     }
 }
