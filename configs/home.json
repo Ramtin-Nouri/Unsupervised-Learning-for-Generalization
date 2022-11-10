@@ -12,11 +12,5 @@
     "convolution_layers_decoder":[64,32,16,8],
     "dense_layers_decoder":[64,64],
     "lstm_num_layers": 1,
-    "lstm_hidden_size": 7168,
-    "dataset":{
-        "num_training_samples": 5000,
-        "num_validation_samples": 2500,
-        "num_training_samples_unsupervised": 400,
-        "num_validation_samples_unsupervised": 100
-    }
+    "lstm_hidden_size": 7168
 }

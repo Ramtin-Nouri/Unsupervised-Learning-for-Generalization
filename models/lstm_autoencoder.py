@@ -26,21 +26,21 @@ class LstmEncoder(LightningModule):
     def __init__(self, config):
         super().__init__()
         conv_features = config["convolution_layers_encoder"]
-        dense_features = config["dense_layers_encoder"]
+        assert type(conv_features) == int, "convolution_layers_encoder must be an integer. Usage of list is deprecated."
+        dense_features = config["dense_layers_encoder"] # TODO: implement dense layers
         self.hidden_size = config["lstm_hidden_size"]
         self.num_layers = config["lstm_num_layers"]
         self.use_joints = config["use_joints"]
         self.num_joints = config["num_joints"]
         in_chan = 3
-        nf = 16 #TODO: replace the previous configs with this one
 
         self.encoder_1_convlstm = ConvLSTMCell(input_dim=in_chan,
-                                               hidden_dim=nf,
+                                               hidden_dim=conv_features,
                                                kernel_size=(3, 3),
                                                bias=True)
 
-        self.encoder_2_convlstm = ConvLSTMCell(input_dim=nf,
-                                               hidden_dim=nf,
+        self.encoder_2_convlstm = ConvLSTMCell(input_dim=conv_features,
+                                               hidden_dim=conv_features,
                                                kernel_size=(3, 3),
                                                bias=True)
 
@@ -79,16 +79,15 @@ class CnnDecoder(LightningModule):
     def __init__(self, config):
         super().__init__()
         conv_features = config["convolution_layers_decoder"]
-        dense_features = config["dense_layers_decoder"]
-        input_shape = config["lstm_hidden_size"]
-        output_shape = (config["height"], config["width"])
+        # TODO: implement joints branch
+        input_shape = config["convolution_layers_encoder"]
         self.num_joints = config["num_joints"]
         self.use_joints = config["use_joints"]
         
         self.conv_layers = nn.Sequential(
-            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(input_shape, conv_features[0], kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.Conv2d(32, 3, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(conv_features[0], 3, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
         )# TODO: dont only consider 2 layers
 

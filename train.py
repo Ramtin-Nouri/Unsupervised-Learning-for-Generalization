@@ -1,8 +1,7 @@
 import argparse
-from mimetypes import init
-from pydoc import ModuleScanner
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks import LambdaCallback
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from datetime import datetime
@@ -119,6 +118,31 @@ def load_config(config_path, debug=False):
     
     return config
 
+
+def predict_train_val_images(datamodule, model, logger, config):
+    # predict on train images
+    train_iter = iter(datamodule.train_dataloader())
+    for _ in range(3):
+        train_batch = next(train_iter)
+        train_batch = [x.to("cuda" if torch.cuda.is_available() else "cpu") for x in train_batch]#TODO: make configurable?
+        pred = model.predict(train_batch)
+        if config["use_joints"]:
+            pred = pred[0]
+        target = train_batch[0][0][-1]
+        logger.log_image(key="train", images=[pred, target], caption=["prediction", "target"]) 
+
+    # predict on val images
+    val_iter = iter(datamodule.val_dataloader())
+    for _ in range(3):
+        val_batch = next(val_iter)
+        val_batch = [x.to("cuda" if torch.cuda.is_available() else "cpu") for x in val_batch]#TODO: make configurable?
+        pred = model.predict(val_batch)
+        if config["use_joints"]:
+            pred = pred[0]
+        target = val_batch[0][0][-1]
+        logger.log_image(key="val", images=[pred, target], caption=["prediction", "target"])    
+    
+
 def train_unsupervised(config, wandb_logger):
     """Train the unsupervised model.
 
@@ -144,12 +168,16 @@ def train_unsupervised(config, wandb_logger):
         filename='unsupervised_{epoch}-{val_loss:.2f}'
     )
 
+    lambda_callback = LambdaCallback(on_epoch_end=lambda epoch, logs: 
+                                     predict_train_val_images(unsupervised_datamodule, unsupervised_model, wandb_logger, config))
+
+
     unsupervised_trainer = pl.Trainer(
         accelerator="gpu",
         devices=config["gpus"],
         max_epochs=config["unsupervised_epochs"],
         logger=wandb_logger,
-        callbacks=[unsupervised_checkpt],
+        callbacks=[unsupervised_checkpt, lambda_callback],
         log_every_n_steps=1,
         check_val_every_n_epoch=1
     )
