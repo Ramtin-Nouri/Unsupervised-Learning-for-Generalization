@@ -63,6 +63,7 @@ def load_config(config_path, debug=False):
     config["convolution_layers_decoder"] = model.get("convolution_layers_decoder", default["model"]["convolution_layers_decoder"])
     config["lstm_num_layers"] = model.get("lstm_num_layers", default["model"]["lstm_num_layers"])
     config["lstm_hidden_size"] = model.get("lstm_hidden_size", default["model"]["lstm_hidden_size"])
+    config["dropout"] = model.get("dropout", default["model"]["dropout"])
 
     # dataset related configs
     dataset = config_file.get("dataset", default["dataset"])

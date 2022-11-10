@@ -34,12 +34,16 @@ class LstmEncoder(LightningModule):
                                                hidden_dim=convlstm_features,
                                                kernel_size=(3, 3),
                                                bias=True)
-        self.maxpool = nn.MaxPool3d(kernel_size=(1, 2, 2))
 
         self.convlstm_2 = ConvLSTMCell(input_dim=convlstm_features,
                                                hidden_dim=convlstm_features,
                                                kernel_size=(3, 3),
                                                bias=True)
+
+        self.maxpool = nn.MaxPool3d(kernel_size=(1, 2, 2))
+        self.dropout = None
+        if config["dropout"] > 0:
+            self.dropout = nn.Dropout(p=config["dropout"])
 
     def forward(self, x, h_t, c_t, h_t2, c_t2):
         """Forward pass of the encoder.
@@ -52,14 +56,18 @@ class LstmEncoder(LightningModule):
         for t in range(seq_len):
             h_t, c_t = self.convlstm_1(input_tensor=x[:, t, :, :],
                                                cur_state=[h_t, c_t])
-            h_t_pooled = self.maxpool(h_t)
+            h_t_next = self.maxpool(h_t)
+            if self.dropout:
+                h_t_next = self.dropout(h_t_next)
 
-            h_t2, c_t2 = self.convlstm_2(input_tensor=h_t_pooled,
+            h_t2, c_t2 = self.convlstm_2(input_tensor=h_t_next,
                                                  cur_state=[h_t2, c_t2]) 
 
-        h_t2_pooled = self.maxpool(h_t2)
+        h_t2_out = self.maxpool(h_t2)
+        if self.dropout:
+            h_t2_out = self.dropout(h_t2_out)
         # encoder_vector
-        return h_t2_pooled
+        return h_t2_out
 
 class CnnDecoder(LightningModule):
     """Decoder of autoencoder.
