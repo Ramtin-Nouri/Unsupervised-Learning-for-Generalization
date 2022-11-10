@@ -284,19 +284,19 @@ def test_supervised(config, wandb_logger, model, datamodule):
     train_confusion_matrix_relative = get_relative_confusion_matrix(train_confusion_matrix_absolute)
     val_confusion_matrix_relative = get_relative_confusion_matrix(val_confusion_matrix_absolute)
 
-    plt = create_confusion_matrix_plt(train_confusion_matrix_absolute, f"Final-training-absolute-{config['run_name']}", "./logs/", False)
+    plt = create_confusion_matrix_plt(train_confusion_matrix_absolute, f"Final-training-absolute-{config['run_name']}", False)
     wandb_logger.log_image(key="Final-training-absolute", images=[plt])
     plt.close()
 
-    plt = create_confusion_matrix_plt(train_confusion_matrix_relative, f"Final-training-relative-{config['run_name']}", "./logs/", True)
+    plt = create_confusion_matrix_plt(train_confusion_matrix_relative, f"Final-training-relative-{config['run_name']}", True)
     wandb_logger.log_image(key="Final-training-relative", images=[plt])
     plt.close()
 
-    plt = create_confusion_matrix_plt(val_confusion_matrix_absolute, f"Final-validation-absolute-{config['run_name']}", "./logs/", False)
+    plt = create_confusion_matrix_plt(val_confusion_matrix_absolute, f"Final-validation-absolute-{config['run_name']}", False)
     wandb_logger.log_image(key="Final-validation-absolute", images=[plt])
     plt.close()
 
-    plt = create_confusion_matrix_plt(val_confusion_matrix_relative, f"Final-validation-relative-{config['run_name']}", "./logs/", True)
+    plt = create_confusion_matrix_plt(val_confusion_matrix_relative, f"Final-validation-relative-{config['run_name']}", True)
     wandb_logger.log_image(key="Final-validation-relative", images=[plt])
     plt.close()
 
@@ -385,22 +385,22 @@ def test_supervised(config, wandb_logger, model, datamodule):
         confusion_matrix_relative_gen = get_relative_confusion_matrix(confusion_matrix_absolute_gen)
 
         plt = create_confusion_matrix_plt(confusion_matrix_absolute,
-                                            f"V{i}-test-absolute-{config['run_name']}", "./logs/", False)
+                                            f"V{i}-test-absolute-{config['run_name']}", False)
         wandb_logger.log_image(key=f"V{i}-test-absolute", images=[plt])
         plt.close()
 
         plt = create_confusion_matrix_plt(confusion_matrix_relative,
-                                            f"V{i}-test-relative-{config['run_name']}", "./logs/", True)
+                                            f"V{i}-test-relative-{config['run_name']}", True)
         wandb_logger.log_image(key=f"V{i}-test-relative", images=[plt])
         plt.close()
 
         plt = create_confusion_matrix_plt(confusion_matrix_absolute_gen,
-                                            f"V{i}-generalization-test-absolute-{config['run_name']}", "./logs/", False)
+                                            f"V{i}-generalization-test-absolute-{config['run_name']}", False)
         wandb_logger.log_image(key=f"V{i}-generalization-test-absolute", images=[plt])
         plt.close()
 
         plt = create_confusion_matrix_plt(confusion_matrix_relative_gen,
-                                            f"V{i}-generalization-test-relative-{config['run_name']}", "./logs/", True)
+                                            f"V{i}-generalization-test-relative-{config['run_name']}", True)
         wandb_logger.log_image(key=f"V{i}-generalization-test-relative", images=[plt])
         plt.close()
 
