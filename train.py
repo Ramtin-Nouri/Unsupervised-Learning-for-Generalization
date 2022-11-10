@@ -1,8 +1,7 @@
 import argparse
-from mimetypes import init
-from pydoc import ModuleScanner
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks import LambdaCallback
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from datetime import datetime
@@ -119,6 +118,53 @@ def load_config(config_path, debug=False):
     
     return config
 
+
+def predict_train_val_images(datamodule, model, logger, config):
+    """Predicts the images in the training and validation set and saves them to the logger.
+    Revert the normalization of the images before saving them.
+    Clamp the values to be between 0 and 1 s.t. the visialization is more clear.
+
+    Args:
+        datamodule (DataModule): The datamodule to use.
+        model (Model): The model to use.
+        logger (Logger): The logger to use.
+        config (dict): The config to use.
+    """
+    dataset_mean = [0.7605, 0.7042, 0.6045]
+    dataset_std = [0.1832, 0.2083, 0.2902]
+    unnormalize = transforms.Normalize(
+        mean=[-m / s for m, s in zip(dataset_mean, dataset_std)],
+        std=[1 / s for s in dataset_std],
+    )
+
+    predict_batches = 2
+    # predict on train images
+    train_iter = iter(datamodule.train_dataloader())
+    for _ in range(predict_batches):
+        train_batch = next(train_iter)
+        train_batch = [x.to("cuda" if torch.cuda.is_available() else "cpu") for x in train_batch]#TODO: make configurable?
+        pred = model.predict(train_batch)
+        if config["use_joints"]:
+            pred = pred[0]
+        pred = unnormalize(pred)
+        pred = torch.clamp(pred, 0, 1)
+        target = train_batch[0][:,-1]
+        logger.log_image(key="train", images=[pred, target], caption=["prediction", "target"]) 
+
+    # predict on val images
+    val_iter = iter(datamodule.val_dataloader())
+    for _ in range(predict_batches):
+        val_batch = next(val_iter)
+        val_batch = [x.to("cuda" if torch.cuda.is_available() else "cpu") for x in val_batch]#TODO: make configurable?
+        pred = model.predict(val_batch)
+        if config["use_joints"]:
+            pred = pred[0]
+        pred = unnormalize(pred)
+        pred = torch.clamp(pred, 0, 1)
+        target = val_batch[0][:,-1]
+        logger.log_image(key="val", images=[pred, target], caption=["prediction", "target"])    
+    
+
 def train_unsupervised(config, wandb_logger):
     """Train the unsupervised model.
 
@@ -144,12 +190,16 @@ def train_unsupervised(config, wandb_logger):
         filename='unsupervised_{epoch}-{val_loss:.2f}'
     )
 
+    lambda_callback = LambdaCallback(on_epoch_end=lambda epoch, logs: 
+                                     predict_train_val_images(unsupervised_datamodule, unsupervised_model, wandb_logger, config))
+
+
     unsupervised_trainer = pl.Trainer(
         accelerator="gpu",
         devices=config["gpus"],
         max_epochs=config["unsupervised_epochs"],
         logger=wandb_logger,
-        callbacks=[unsupervised_checkpt],
+        callbacks=[unsupervised_checkpt, lambda_callback],
         log_every_n_steps=1,
         check_val_every_n_epoch=1
     )
@@ -180,9 +230,6 @@ def load_model(model_path, is_unsupervised, encoder=None):
     # Load model
     model_ckpt = torch.load(model_path)
     saved_config = model_ckpt["hyper_parameters"]["config"]
-    for key in saved_config:
-        if "layers" in key and not "num_layers" in key:
-            saved_config[key] = saved_config[key][1:] # Remove the added first layer
 
     if is_unsupervised:
         model = LstmAutoencoder(saved_config)
@@ -258,19 +305,19 @@ def test_supervised(config, wandb_logger, model, datamodule):
     train_confusion_matrix_relative = get_relative_confusion_matrix(train_confusion_matrix_absolute)
     val_confusion_matrix_relative = get_relative_confusion_matrix(val_confusion_matrix_absolute)
 
-    plt = create_confusion_matrix_plt(train_confusion_matrix_absolute, f"Final-training-absolute-{config['run_name']}", "./logs/", False)
+    plt = create_confusion_matrix_plt(train_confusion_matrix_absolute, f"Final-training-absolute-{config['run_name']}", False)
     wandb_logger.log_image(key="Final-training-absolute", images=[plt])
     plt.close()
 
-    plt = create_confusion_matrix_plt(train_confusion_matrix_relative, f"Final-training-relative-{config['run_name']}", "./logs/", True)
+    plt = create_confusion_matrix_plt(train_confusion_matrix_relative, f"Final-training-relative-{config['run_name']}", True)
     wandb_logger.log_image(key="Final-training-relative", images=[plt])
     plt.close()
 
-    plt = create_confusion_matrix_plt(val_confusion_matrix_absolute, f"Final-validation-absolute-{config['run_name']}", "./logs/", False)
+    plt = create_confusion_matrix_plt(val_confusion_matrix_absolute, f"Final-validation-absolute-{config['run_name']}", False)
     wandb_logger.log_image(key="Final-validation-absolute", images=[plt])
     plt.close()
 
-    plt = create_confusion_matrix_plt(val_confusion_matrix_relative, f"Final-validation-relative-{config['run_name']}", "./logs/", True)
+    plt = create_confusion_matrix_plt(val_confusion_matrix_relative, f"Final-validation-relative-{config['run_name']}", True)
     wandb_logger.log_image(key="Final-validation-relative", images=[plt])
     plt.close()
 
@@ -359,22 +406,22 @@ def test_supervised(config, wandb_logger, model, datamodule):
         confusion_matrix_relative_gen = get_relative_confusion_matrix(confusion_matrix_absolute_gen)
 
         plt = create_confusion_matrix_plt(confusion_matrix_absolute,
-                                            f"V{i}-test-absolute-{config['run_name']}", "./logs/", False)
+                                            f"V{i}-test-absolute-{config['run_name']}", False)
         wandb_logger.log_image(key=f"V{i}-test-absolute", images=[plt])
         plt.close()
 
         plt = create_confusion_matrix_plt(confusion_matrix_relative,
-                                            f"V{i}-test-relative-{config['run_name']}", "./logs/", True)
+                                            f"V{i}-test-relative-{config['run_name']}", True)
         wandb_logger.log_image(key=f"V{i}-test-relative", images=[plt])
         plt.close()
 
         plt = create_confusion_matrix_plt(confusion_matrix_absolute_gen,
-                                            f"V{i}-generalization-test-absolute-{config['run_name']}", "./logs/", False)
+                                            f"V{i}-generalization-test-absolute-{config['run_name']}", False)
         wandb_logger.log_image(key=f"V{i}-generalization-test-absolute", images=[plt])
         plt.close()
 
         plt = create_confusion_matrix_plt(confusion_matrix_relative_gen,
-                                            f"V{i}-generalization-test-relative-{config['run_name']}", "./logs/", True)
+                                            f"V{i}-generalization-test-relative-{config['run_name']}", True)
         wandb_logger.log_image(key=f"V{i}-generalization-test-relative", images=[plt])
         plt.close()
 

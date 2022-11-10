@@ -17,29 +17,34 @@ class ClassificationLstmDecoder(LightningModule):
         output_size (int): Number of classes to predict.
         config (dict): Dictionary containing the configuration of the model.
     """
-    def __init__(self, config, output_size):
+    def __init__(self, config):
         super().__init__()
         self.hidden_size = config["lstm_hidden_size"]
         self.num_layers=config["lstm_num_layers"]
         self.sentence_length = config["sentence_length"]
         self.label_size = config["dictionary_size"]
+        input_size = config["convolution_layers_encoder"] * config["width"] * config["height"]
 
-        self.lstm = nn.LSTM(input_size=self.hidden_size, hidden_size=self.hidden_size,
+        self.flatten = nn.Flatten()
+        self.lstm = nn.LSTM(input_size=input_size, hidden_size=self.hidden_size,
                             num_layers=self.num_layers, batch_first=True)
-        self.linear = nn.Linear(self.hidden_size, output_size)
+        self.linear = nn.Linear(self.hidden_size, config["dictionary_size"])
 
-    def forward(self, hidden, x):
+    def forward(self, x):
         """ Forward pass of the decoder.
 
         Args:
             hidden (tuple): Tuple containing the hidden state (hx) and the cell state (cx) of the LSTM.
                 hx (torch.Tensor): Hidden state of the LSTM. Shape: (num_layers, batch_size, hidden_size)
                 cx (torch.Tensor): Cell state of the LSTM. Shape: (num_layers, batch_size, hidden_size)
-            x (torch.Tensor): Output of the encoder. Shape: (batch_size, 1, hidden_size) e.g. (32, 1, 256)
+            x (torch.Tensor): Output of the encoder. Shape: (batch_size, features, h, w) e.g. (8, 64, 224, 398)
 
         Returns:
             torch.Tensor: Output of the decoder. Shape: (batch_size, sentence_length, label_size) i.e. (batch_size, 3, 19)
         """
+        hidden = self.init_hidden(x.shape[0], x.device)
+        x = self.flatten(x)
+        x = x.unsqueeze(1)
         pred = torch.zeros((x.shape[0], self.sentence_length, self.label_size), device=x.device) 
         for i in range(self.sentence_length):
             lstm_out, hidden = self.lstm(x, hidden)
@@ -81,8 +86,8 @@ class LstmClassifier(LightningModule):
         self.sentence_length = config["sentence_length"]
 
         self.encoder = encoder
-        self.encoder.requires_frad = False
-        self.decoder = ClassificationLstmDecoder(output_size=self.label_size, config=config)
+        self.encoder.requires_frad = False # Freeze the encoder 
+        self.decoder = ClassificationLstmDecoder(config)
 
         self.loss_fn = nn.CrossEntropyLoss()
         self.reset_metrics_train()
@@ -98,28 +103,21 @@ class LstmClassifier(LightningModule):
         Returns:
             torch.Tensor: Output of the model. Shape: (batch_size, sentence_length, label_size) i.e. (batch_size, 3, 19)
         """
-        N = x_frames.shape[0]  # batch size
-        L = x_frames.shape[1]  # num_frames
-
         # encode frames
-        x_frames = rearrange(x_frames, 'N L c w h -> L N c w h')
-        hidden = self.encoder.init_hidden(N, x_frames.device)
-
         if self.use_joints:
-            if x_joints is None:
-                print_warning("Using joints but no joints given")
-                x_joints = torch.zeros((L, N, self.num_joints), device=x_frames.device)
-            else:
-                x_joints = rearrange(x_joints, 'n l c -> l n c', c=self.num_joints)
+           raise NotImplementedError("Not implemented yet")
 
-            for i in range(L):
-                encoder_out, hidden = self.encoder(hidden, x_frames[i], x_joints[i])
-        else:
-            for i in range(L):
-                encoder_out, hidden = self.encoder(hidden, x_frames[i])
+        # find size of different input dimensions
+        b, seq_len, _, h, w = x_frames.size()
+
+        # initialize hidden states
+        h_t, c_t = self.encoder.encoder_1_convlstm.init_hidden(batch_size=b, image_size=(h, w))
+        h_t2, c_t2 = self.encoder.encoder_2_convlstm.init_hidden(batch_size=b, image_size=(h, w))
+        
+        encoder_out = self.encoder(x_frames, h_t, c_t, h_t2, c_t2)
 
         # decode
-        decoder_out = self.decoder(hidden=hidden, x=encoder_out)
+        decoder_out = self.decoder(x=encoder_out)
         return decoder_out
 
     def configure_optimizers(self):

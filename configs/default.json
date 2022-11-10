@@ -22,7 +22,7 @@
         "height": 224,
         "num_training_samples": 5000,
         "num_validation_samples": 2500,
-        "num_training_samples_unsupervised": 500,
+        "num_training_samples_unsupervised": 5000,
         "num_validation_samples_unsupervised": 250,
         "visible_objects": 1,
         "different_colors": 1,
