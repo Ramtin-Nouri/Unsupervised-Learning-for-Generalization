@@ -23,7 +23,7 @@ class ClassificationLstmDecoder(LightningModule):
         self.num_layers=config["lstm_num_layers"]
         self.sentence_length = config["sentence_length"]
         self.label_size = config["dictionary_size"]
-        input_size = config["convolution_layers_encoder"] * config["width"] * config["height"]
+        input_size = config["convlstm_features"] * (config["width"]//4) * (config["height"]//4)
 
         self.flatten = nn.Flatten()
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=self.hidden_size,
@@ -111,8 +111,8 @@ class LstmClassifier(LightningModule):
         b, seq_len, _, h, w = x_frames.size()
 
         # initialize hidden states
-        h_t, c_t = self.encoder.encoder_1_convlstm.init_hidden(batch_size=b, image_size=(h, w))
-        h_t2, c_t2 = self.encoder.encoder_2_convlstm.init_hidden(batch_size=b, image_size=(h, w))
+        h_t, c_t = self.encoder.convlstm_1.init_hidden(batch_size=b, image_size=(h, w))
+        h_t2, c_t2 = self.encoder.convlstm_2.init_hidden(batch_size=b, image_size=(h//2, w//2))
         
         encoder_out = self.encoder(x_frames, h_t, c_t, h_t2, c_t2)
 
