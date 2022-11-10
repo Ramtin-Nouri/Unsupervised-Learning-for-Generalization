@@ -7,10 +7,12 @@
     "unsupervised_epochs": 10,
 
     "use_joints": false,
-    "convolution_layers_encoder":[16,32,64,64],
-    "dense_layers_encoder":[64,64],
-    "convolution_layers_decoder":[64,32,16,8],
-    "dense_layers_decoder":[64,64],
-    "lstm_num_layers": 1,
-    "lstm_hidden_size": 512
+    "model":{
+        "convolution_layers_encoder":16,
+        "dense_layers_encoder":[64,64],
+        "convolution_layers_decoder":[64,32,16,8],
+        "dense_layers_decoder":[64,64],
+        "lstm_num_layers": 1,
+        "lstm_hidden_size": 512
+    }
 }
