@@ -87,8 +87,7 @@ class CnnDecoder(LightningModule):
         self.conv_layers = nn.Sequential(
             nn.Conv2d(input_shape, conv_features[0], kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.Conv2d(conv_features[0], 3, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
+            nn.Conv2d(conv_features[0], 3, kernel_size=3, stride=1, padding=1)
         )# TODO: dont only consider 2 layers
 
 

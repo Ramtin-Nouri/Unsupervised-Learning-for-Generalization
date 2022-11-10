@@ -120,6 +120,23 @@ def load_config(config_path, debug=False):
 
 
 def predict_train_val_images(datamodule, model, logger, config):
+    """Predicts the images in the training and validation set and saves them to the logger.
+    Revert the normalization of the images before saving them.
+    Clamp the values to be between 0 and 1 s.t. the visialization is more clear.
+
+    Args:
+        datamodule (DataModule): The datamodule to use.
+        model (Model): The model to use.
+        logger (Logger): The logger to use.
+        config (dict): The config to use.
+    """
+    dataset_mean = [0.7605, 0.7042, 0.6045]
+    dataset_std = [0.1832, 0.2083, 0.2902]
+    unnormalize = transforms.Normalize(
+        mean=[-m / s for m, s in zip(dataset_mean, dataset_std)],
+        std=[1 / s for s in dataset_std],
+    )
+
     predict_batches = 2
     # predict on train images
     train_iter = iter(datamodule.train_dataloader())
@@ -129,6 +146,8 @@ def predict_train_val_images(datamodule, model, logger, config):
         pred = model.predict(train_batch)
         if config["use_joints"]:
             pred = pred[0]
+        pred = unnormalize(pred)
+        pred = torch.clamp(pred, 0, 1)
         target = train_batch[0][:,-1]
         logger.log_image(key="train", images=[pred, target], caption=["prediction", "target"]) 
 
@@ -140,6 +159,8 @@ def predict_train_val_images(datamodule, model, logger, config):
         pred = model.predict(val_batch)
         if config["use_joints"]:
             pred = pred[0]
+        pred = unnormalize(pred)
+        pred = torch.clamp(pred, 0, 1)
         target = val_batch[0][:,-1]
         logger.log_image(key="val", images=[pred, target], caption=["prediction", "target"])    
     
