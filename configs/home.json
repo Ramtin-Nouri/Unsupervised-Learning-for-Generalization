@@ -12,5 +12,5 @@
     "convolution_layers_decoder":[64,32,16,8],
     "dense_layers_decoder":[64,64],
     "lstm_num_layers": 1,
-    "lstm_hidden_size": 7168
+    "lstm_hidden_size": 512
 }

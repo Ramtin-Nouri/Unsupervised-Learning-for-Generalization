@@ -120,26 +120,27 @@ def load_config(config_path, debug=False):
 
 
 def predict_train_val_images(datamodule, model, logger, config):
+    predict_batches = 2
     # predict on train images
     train_iter = iter(datamodule.train_dataloader())
-    for _ in range(3):
+    for _ in range(predict_batches):
         train_batch = next(train_iter)
         train_batch = [x.to("cuda" if torch.cuda.is_available() else "cpu") for x in train_batch]#TODO: make configurable?
         pred = model.predict(train_batch)
         if config["use_joints"]:
             pred = pred[0]
-        target = train_batch[0][0][-1]
+        target = train_batch[0][:,-1]
         logger.log_image(key="train", images=[pred, target], caption=["prediction", "target"]) 
 
     # predict on val images
     val_iter = iter(datamodule.val_dataloader())
-    for _ in range(3):
+    for _ in range(predict_batches):
         val_batch = next(val_iter)
         val_batch = [x.to("cuda" if torch.cuda.is_available() else "cpu") for x in val_batch]#TODO: make configurable?
         pred = model.predict(val_batch)
         if config["use_joints"]:
             pred = pred[0]
-        target = val_batch[0][0][-1]
+        target = val_batch[0][:,-1]
         logger.log_image(key="val", images=[pred, target], caption=["prediction", "target"])    
     
 
@@ -208,9 +209,6 @@ def load_model(model_path, is_unsupervised, encoder=None):
     # Load model
     model_ckpt = torch.load(model_path)
     saved_config = model_ckpt["hyper_parameters"]["config"]
-    for key in saved_config:
-        if "layers" in key and not "num_layers" in key:
-            saved_config[key] = saved_config[key][1:] # Remove the added first layer
 
     if is_unsupervised:
         model = LstmAutoencoder(saved_config)
