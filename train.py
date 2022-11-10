@@ -53,14 +53,18 @@ def load_config(config_path, debug=False):
         input_stride=config_file.get("input_stride", default["input_stride"]),
         use_joints=config_file.get("use_joints", default["use_joints"]),
         output_dir=config_file.get("output_dir", default["output_dir"]),
-        learning_rate=config_file.get("learning_rate", default["learning_rate"]),
-        convolution_layers_encoder=config_file.get("convolution_layers_encoder", default["convolution_layers_encoder"]),
-        convolution_layers_decoder=config_file.get("convolution_layers_decoder", default["convolution_layers_decoder"]),
-        dense_layers_encoder=config_file.get("dense_layers_encoder", default["dense_layers_encoder"]),
-        dense_layers_decoder=config_file.get("dense_layers_decoder", default["dense_layers_decoder"]),
-        lstm_num_layers=config_file.get("lstm_num_layers", default["lstm_num_layers"]),
-        lstm_hidden_size=config_file.get("lstm_hidden_size", default["lstm_hidden_size"]),
+        learning_rate=config_file.get("learning_rate", default["learning_rate"])
     )
+
+    # model architecture related configs
+    model = config_file.get("model", default["model"])
+    config["convolution_layers_encoder"] = model.get("convolution_layers_encoder", default["model"]["convolution_layers_encoder"])
+    config["convolution_layers_decoder"] = model.get("convolution_layers_decoder", default["model"]["convolution_layers_decoder"])
+    config["dense_layers_encoder"] = model.get("dense_layers_encoder", default["model"]["dense_layers_encoder"])
+    config["dense_layers_decoder"] = model.get("dense_layers_decoder", default["model"]["dense_layers_decoder"])
+    config["lstm_num_layers"] = model.get("lstm_num_layers", default["model"]["lstm_num_layers"])
+    config["lstm_hidden_size"] = model.get("lstm_hidden_size", default["model"]["lstm_hidden_size"])
+
     # dataset related configs
     dataset = config_file.get("dataset", default["dataset"])
     config["width"] = dataset.get("width", default["dataset"]["width"])
