@@ -141,7 +141,7 @@ def predict_train_val_images(datamodule, model, logger, config):
         std=[1 / s for s in dataset_std],
     )
 
-    predict_batches = 2
+    predict_batches = 3
     # predict on train images
     train_iter = iter(datamodule.train_dataloader())
     for _ in range(predict_batches):

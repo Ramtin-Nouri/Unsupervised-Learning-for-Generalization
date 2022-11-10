@@ -1,18 +1,17 @@
 {
     "gpus": 1,
     "epochs": 10,
+    "unsupervised_epochs": 10,
     "batch_size": 1,
     "num_workers": 8,
     "input_length": 15,
-    "unsupervised_epochs": 10,
 
     "use_joints": false,
     "model":{
-        "convolution_layers_encoder":16,
-        "dense_layers_encoder":[64,64],
-        "convolution_layers_decoder":[64,32,16,8],
-        "dense_layers_decoder":[64,64],
-        "lstm_num_layers": 1,
-        "lstm_hidden_size": 512
+        "convlstm_features":16,
+        "convlstm_layers":2,
+        "convolution_layers_decoder":[32],
+        "lstm_num_layers": 4,
+        "lstm_hidden_size": 64
     }
 }
