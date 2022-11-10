@@ -32,7 +32,7 @@ class LstmEncoder(LightningModule):
         self.use_joints = config["use_joints"]
         self.num_joints = config["num_joints"]
         in_chan = 3
-        nf = 32 #TODO: replace the previous configs with this one
+        nf = 8 #TODO: replace the previous configs with this one
 
         self.encoder_1_convlstm = ConvLSTMCell(input_dim=in_chan,
                                                hidden_dim=nf,
@@ -85,31 +85,13 @@ class CnnDecoder(LightningModule):
         self.num_joints = config["num_joints"]
         self.use_joints = config["use_joints"]
         
-        # Build the layer list backwards then reverse it (to know the exact shapes)
-        layer_list = []
-        conv_features.insert(0, 1) # Input should always be 1 (unflattened from dense)
-        current_shape = output_shape
-        for i in range(len(conv_features) - 2,-1,-1):
-            layer_list.append(nn.Upsample(size=current_shape, mode='bilinear'))
-            layer_list.append(nn.ReLU())
-            layer_list.append(nn.Conv2d(conv_features[i], conv_features[i + 1], kernel_size=3, stride=1, padding=1))
-            current_shape = (current_shape[0] // 2, current_shape[1] // 2)
-        layer_list.append(nn.Unflatten(dim=-1, unflattened_size=(current_shape)))
-        layer_list.append(nn.Sigmoid())
-        layer_list.append(nn.Linear(input_shape, np.prod(current_shape)))
-        layer_list.reverse()
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(8, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 3, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+        )# TODO: dont only consider 2 layers
 
-        layer_list.append(nn.Conv2d(conv_features[-1], 3, kernel_size=3, stride=1, padding=1))
-        layer_list.append(nn.Sigmoid())
-        self.conv_layers = nn.Sequential(*layer_list)
-
-        dense_features.insert(0, input_shape)
-        dense_list = []
-        for i in range(len(dense_features) - 1):
-            dense_list.append(nn.Linear(dense_features[i], dense_features[i + 1]))
-            dense_list.append(nn.Sigmoid())
-        dense_list.append(nn.Linear(dense_features[-1], self.num_joints))
-        self.dense_layers = nn.Sequential(*dense_list)
 
 
     def forward(self, x):
@@ -124,8 +106,7 @@ class CnnDecoder(LightningModule):
         """
         conv_out = self.conv_layers(x)
         if self.use_joints:
-            dense_out = self.dense_layers(x)
-            return conv_out, dense_out
+            print_warning("Joints are not yet implemented in the CNN model.")
         return conv_out
 
 
@@ -176,7 +157,6 @@ class LstmAutoencoder(LightningModule):
 
         # autoencoder forward
         encoder_vector = self.encoder(x, h_t, c_t, h_t2, c_t2)
-        
         output = self.decoder(encoder_vector)
 
         return output
