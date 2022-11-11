@@ -25,27 +25,31 @@ class LstmEncoder(LightningModule):
 
     def __init__(self, config):
         super().__init__()
-        convlstm_features = config["convlstm_features"]
-        convlstm_layers = config["convlstm_layers"] # TODO: actually use this, atm only 2 layers are used
+        convlstm_layers = config["convlstm_layers"] # e.g. [32,64,128]
         self.use_joints = config["use_joints"]
         in_chan = 3
 
         self.convlstm_1 = ConvLSTMCell(input_dim=in_chan,
-                                               hidden_dim=convlstm_features,
+                                               hidden_dim=convlstm_layers[0],
                                                kernel_size=(3, 3),
                                                bias=True)
 
-        self.convlstm_2 = ConvLSTMCell(input_dim=convlstm_features,
-                                               hidden_dim=convlstm_features,
+        self.convlstm_2 = ConvLSTMCell(input_dim=convlstm_layers[0],
+                                               hidden_dim=convlstm_layers[1],
                                                kernel_size=(3, 3),
                                                bias=True)
+
+        self.convlstm_3 = ConvLSTMCell(input_dim=convlstm_layers[1],
+                                                  hidden_dim=convlstm_layers[2],
+                                                  kernel_size=(3, 3),
+                                                  bias=True)
 
         self.maxpool = nn.MaxPool3d(kernel_size=(1, 2, 2))
         self.dropout = None
         if config["dropout"] > 0:
             self.dropout = nn.Dropout(p=config["dropout"])
 
-    def forward(self, x, h_t, c_t, h_t2, c_t2):
+    def forward(self, x, h_t, c_t, h_t2, c_t2, h_t3, c_t3):
         """Forward pass of the encoder.
         """
         if self.use_joints:
@@ -62,12 +66,18 @@ class LstmEncoder(LightningModule):
 
             h_t2, c_t2 = self.convlstm_2(input_tensor=h_t_next,
                                                  cur_state=[h_t2, c_t2]) 
+            h_t2_next = self.maxpool(h_t2)
+            if self.dropout:
+                h_t2_next = self.dropout(h_t2_next)
 
-        h_t2_out = self.maxpool(h_t2)
+            h_t3, c_t3 = self.convlstm_3(input_tensor=h_t2_next,
+                                                    cur_state=[h_t3, c_t3])
+        h_t3_next = self.maxpool(h_t3)
         if self.dropout:
-            h_t2_out = self.dropout(h_t2_out)
-        # encoder_vector
-        return h_t2_out
+            h_t3_next = self.dropout(h_t3_next)
+
+        return h_t3_next
+
 
 class CnnDecoder(LightningModule):
     """Decoder of autoencoder.
@@ -163,9 +173,10 @@ class LstmAutoencoder(LightningModule):
         # initialize hidden states
         h_t, c_t = self.encoder.convlstm_1.init_hidden(batch_size=b, image_size=(h, w))
         h_t2, c_t2 = self.encoder.convlstm_2.init_hidden(batch_size=b, image_size=(h//2, w//2))
+        h_t3, c_t3 = self.encoder.convlstm_3.init_hidden(batch_size=b, image_size=(h//4, w//4))
 
         # autoencoder forward
-        encoder_vector = self.encoder(x, h_t, c_t, h_t2, c_t2)
+        encoder_vector = self.encoder(x, h_t, c_t, h_t2, c_t2, h_t3, c_t3)
         output = self.decoder(encoder_vector)
 
         return output
