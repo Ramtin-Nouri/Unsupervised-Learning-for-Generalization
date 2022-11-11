@@ -219,4 +219,16 @@ class LstmAutoencoder(LightningModule):
         
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        """Configures the optimizer.
+
+        Returns:
+            torch.optim.Adam: Adam optimizer
+        """
+        # lr scheduler
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=2, verbose=True)
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': scheduler,
+            'monitor': 'val_loss'
+        }
