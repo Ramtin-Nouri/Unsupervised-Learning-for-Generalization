@@ -104,12 +104,15 @@ class CnnDecoder(LightningModule):
         h = config["height"]
         
         self.conv_layers = nn.Sequential(
-            nn.Upsample(size=(h//2,w//2), mode='nearest'),
             nn.Conv2d(input_shape, conv_features[0], kernel_size=3, stride=1, padding=1),
+            nn.Upsample(size=(h//4,w//4), mode='nearest'),
             nn.ReLU(),
-            nn.Upsample(size=(h, w), mode='nearest'),
-            nn.Conv2d(conv_features[0], 3, kernel_size=3, stride=1, padding=1)
-        )# TODO: dont only consider 2 layers
+            nn.Conv2d(conv_features[0], 3, kernel_size=3, stride=1, padding=1),
+            nn.Upsample(size=(h//2,w//2), mode='nearest'),
+            nn.ReLU(),
+            nn.Conv2d(conv_features[1], 3, kernel_size=3, stride=1, padding=1),
+            nn.Upsample(size=(h, w), mode='nearest')
+        )# TODO: dont hardcoder number of layers
 
 
 
