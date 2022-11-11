@@ -97,7 +97,7 @@ class CnnDecoder(LightningModule):
         super().__init__()
         conv_features = config["convolution_layers_decoder"]
         # TODO: implement joints branch
-        input_shape = config["convlstm_features"]
+        input_shape = config["convlstm_layers"][-1]
         self.num_joints = config["num_joints"]
         self.use_joints = config["use_joints"]
         w = config["width"]
