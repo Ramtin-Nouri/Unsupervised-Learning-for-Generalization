@@ -2,17 +2,15 @@
     "gpus": 1,
     "epochs": 50,
     "unsupervised_epochs": 10,
-    "batch_size": 4,
+    "batch_size": 2,
     "num_workers": 8,
     "use_joints": false,
     "model":{
     	"lstm_hidden_size": 512,
-   	"lstm_num_layers": 1,
-    	"convlstm_layers": [32,64,128],
-        "dense_layers_encoder": [1,1],
+   	    "lstm_num_layers": 1,
+    	"convlstm_layers": [16,32,64],
         "convolution_layers_decoder": [64,32,16],
-        "dense_layers_decoder": [1,1],
-	"dropout":0
+	    "dropout":0
     },
     "dataset":{
 	"num_training_samples_unsupervised":500
