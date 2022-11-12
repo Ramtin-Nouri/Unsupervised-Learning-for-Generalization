@@ -190,7 +190,7 @@ def train_unsupervised(config, wandb_logger):
         verbose=True,
         monitor="val_loss",
         mode="min",
-        filename='unsupervised_{epoch}-{val_loss:.2f}'
+        filename='unsupervised_{epoch}-{val_loss:.3f}'
     )
 
     lambda_callback = LambdaCallback(on_epoch_end=lambda epoch, logs: 
@@ -264,7 +264,7 @@ def train_supervised(config, wandb_logger, encoder):
         verbose=True,
         monitor="val_loss",
         mode="min",
-        filename='supervised_{epoch}-{val_loss:.2f}'
+        filename='supervised_{epoch}-{val_loss:.3f}'
     )
 
     supervised_trainer = pl.Trainer(
