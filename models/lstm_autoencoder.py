@@ -94,19 +94,20 @@ class CnnDecoder(LightningModule):
         self.use_joints = config["use_joints"]
         w = config["width"]
         h = config["height"]
-        
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(input_shape, conv_features[0], kernel_size=3, stride=1, padding=1),
-            nn.Upsample(size=(h//4,w//4), mode='nearest'),
-            nn.ReLU(),
-            nn.Conv2d(conv_features[0], conv_features[1], kernel_size=3, stride=1, padding=1),
-            nn.Upsample(size=(h//2,w//2), mode='nearest'),
-            nn.ReLU(),
-            nn.Conv2d(conv_features[1], 3, kernel_size=3, stride=1, padding=1),
-            nn.Upsample(size=(h, w), mode='nearest')
-        )# TODO: dont hardcoder number of layers
 
+        conv_layers = []
+        for i in range(len(conv_features)):
+            conv_layers.append(nn.Conv2d(input_shape, conv_features[i], kernel_size=3, padding=1))
+            upsample_w = w // (2 ** (len(conv_features)-(i+1)) )
+            upsample_h = h // (2 ** (len(conv_features)-(i+1)) )
+            conv_layers.append(nn.Upsample(size=(upsample_h, upsample_w), mode='nearest'))
+            conv_layers.append(nn.ReLU())
+            # nn.BatchNorm2d(conv_features[i]) # Use batchnorm?
+            input_shape = conv_features[i]
+        # Last layer without ReLU
+        conv_layers.append(nn.Conv2d(input_shape, 3, kernel_size=3, padding=1))
 
+        self.conv_layers = nn.Sequential(*conv_layers)
 
     def forward(self, x):
         """Forward pass of the decoder.
