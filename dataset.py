@@ -261,9 +261,9 @@ class DataModule(LightningDataModule):
         """
         if self.unsupervised:
             if part == "training":
-                num_samples = self.config["num_training_samples"]
+                num_samples = self.config["num_training_samples_unsupervised"]
             elif part == "validation":
-                num_samples = self.config["num_validation_samples"]
+                num_samples = self.config["num_validation_samples_unsupervised"]
             else:
                 num_samples = 2 # We only need 2 samples for the test set
         else:
