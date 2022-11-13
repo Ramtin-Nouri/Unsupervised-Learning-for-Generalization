@@ -210,7 +210,7 @@ class LstmAutoencoder(LightningModule):
         #TODO: add joints to the input
         out = self(x_frames[:, :-1, :, :, :]) # feed all frames except the last one
         target = x_frames[:, 1:, :, :, :] # target is the next frame respectively
-        loss = self.loss(out[self.init_length:], target[self.init_length:]) # only calculate loss for the frames after the initialization
+        loss = self.loss(out[:,self.init_length:], target[:,self.init_length:]) # only calculate loss for the frames after the initialization
         return loss
     
     def predict(self,batch):
