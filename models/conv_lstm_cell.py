@@ -36,7 +36,7 @@ class ConvLSTMCell(LightningModule):
                               out_channels=4 * self.hidden_dim,
                               kernel_size=self.kernel_size,
                               padding=self.padding,
-                              bias=self.bias)
+                              bias=self.bias).to(device=self.device)
 
     def forward(self, input_tensor, cur_state):
         """Forward pass of the ConvLSTM cell.

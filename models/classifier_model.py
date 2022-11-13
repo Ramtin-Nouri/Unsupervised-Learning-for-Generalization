@@ -110,13 +110,17 @@ class LstmClassifier(LightningModule):
         # find size of different input dimensions
         b, seq_len, _, h, w = x_frames.size()
 
-        # initialize hidden states
-        h_t, c_t = self.encoder.convlstm_1.init_hidden(batch_size=b, image_size=(h, w))
-        h_t2, c_t2 = self.encoder.convlstm_2.init_hidden(batch_size=b, image_size=(h//2, w//2))
-        h_t3, c_t3 = self.encoder.convlstm_3.init_hidden(batch_size=b, image_size=(h//4, w//4))
-        
-        encoder_out = self.encoder(x_frames, h_t, c_t, h_t2, c_t2, h_t3, c_t3)[-1]
-        
+         # initialize hidden states
+        h_t = []
+        c_t = []
+        for i in range(len(self.encoder.convLSTMs)):
+            new_h, new_c = self.encoder.convLSTMs[i].init_hidden(b, image_size=(h//2**i, w//2**i))
+            h_t.append(new_h)
+            c_t.append(new_c)
+
+        # autoencoder forward
+        encoder_out = self.encoder(x_frames, h_t, c_t)[-1]
+
         # decode
         decoder_out = self.decoder(x=encoder_out)
         return decoder_out
