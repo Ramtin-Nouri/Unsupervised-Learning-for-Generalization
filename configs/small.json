@@ -7,9 +7,8 @@
     "input_length": 10,
     "use_joints": false,
     "model":{
-        "convlstm_features":8,
-        "convlstm_layers":2,
-        "convolution_layers_decoder":[32],
+        "convlstm_layers":[2,2,2],
+        "convolution_layers_decoder":[8,8,8],
         "lstm_num_layers": 2,
         "lstm_hidden_size": 128
     }

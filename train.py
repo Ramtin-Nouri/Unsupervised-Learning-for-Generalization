@@ -358,40 +358,12 @@ def test_supervised(config, wandb_logger, model, datamodule):
     cf_matrices_absolute = np.zeros((6, 19, 19))
     cf_matrices_absolute_gen = np.zeros((6, 19, 19))
 
-    dataset_mean = [0.7605, 0.7042, 0.6045]
-    dataset_std = [0.1832, 0.2083, 0.2902]
-    normal_transform = transforms.Normalize(mean=dataset_mean, std=dataset_std)
-    transform = normal_transform
-
     sentence_wise_accuracies_constant = []
     sentence_wise_accuracies_gen = []
-    num_samples = 10 if config["debug"] else 2000
     for i in range(1, 7):
-        test_data = dataset.MultimodalSimulation(path=config["data_path"],
-                                            visible_objects=i,
-                                            different_actions=config["different_actions"],
-                                            different_colors=config["different_colors"],
-                                            different_objects=config["different_objects"],
-                                            exclusive_colors=config["exclusive_colors"],
-                                            part="constant-test",
-                                            num_samples=num_samples,
-                                            input_length=config["input_length"],
-                                            frame_stride=config["input_stride"],
-                                            transform=transform,
-                                            debug=config["debug"])
-
-        gen_test_data = dataset.MultimodalSimulation(path=config["data_path"],
-                                                visible_objects=i,
-                                                different_actions=config["different_actions"],
-                                                different_colors=config["different_colors"],
-                                                different_objects=config["different_objects"],
-                                                exclusive_colors=config["exclusive_colors"],
-                                                part="generalization-test",
-                                                num_samples=num_samples,
-                                                input_length=config["input_length"],
-                                                frame_stride=config["input_stride"],
-                                                transform=transform,
-                                                debug=config["debug"])
+        #create_dataset(self, visible_objects, different_colors, different_objects, exclusive_colors, part):
+        test_data = datamodule.create_dataset(i, 0, 0, False, "constant-test")
+        gen_test_data = datamodule.create_dataset(i, 0, 0, False, "generalization-test")
 
         # dataloader
         test_loader = DataLoader(dataset=test_data, batch_size=config["batch_size"], shuffle=False,
