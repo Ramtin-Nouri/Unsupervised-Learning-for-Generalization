@@ -133,39 +133,40 @@ def predict_train_val_images(datamodule, model, logger, config):
         logger (Logger): The logger to use.
         config (dict): The config to use.
     """
-    dataset_mean = [0.7605, 0.7042, 0.6045]
-    dataset_std = [0.1832, 0.2083, 0.2902]
-    unnormalize = transforms.Normalize(
-        mean=[-m / s for m, s in zip(dataset_mean, dataset_std)],
-        std=[1 / s for s in dataset_std],
-    )
+    with torch.no_grad():
+        dataset_mean = [0.7605, 0.7042, 0.6045]
+        dataset_std = [0.1832, 0.2083, 0.2902]
+        unnormalize = transforms.Normalize(
+            mean=[-m / s for m, s in zip(dataset_mean, dataset_std)],
+            std=[1 / s for s in dataset_std],
+        )
 
-    predict_batches = 3
-    # predict on train images
-    train_iter = iter(datamodule.train_dataloader())
-    for _ in range(predict_batches):
-        train_batch = next(train_iter)
-        train_batch = [x.to("cuda" if torch.cuda.is_available() else "cpu") for x in train_batch]#TODO: make configurable?
-        pred = model.predict(train_batch)
-        if config["use_joints"]:
-            pred = pred[0]
-        pred = unnormalize(pred)
-        pred = torch.clamp(pred, 0, 1)
-        target = train_batch[0][:,-1]
-        logger.log_image(key="train", images=[pred, target], caption=["prediction", "target"]) 
+        predict_batches = 3
+        # predict on train images
+        train_iter = iter(datamodule.train_dataloader())
+        for _ in range(predict_batches):
+            train_batch = next(train_iter)
+            train_batch = [x.to("cuda" if torch.cuda.is_available() else "cpu") for x in train_batch]#TODO: make configurable?
+            pred = model.predict(train_batch)
+            if config["use_joints"]:
+                pred = pred[0]
+            pred = unnormalize(pred)
+            pred = torch.clamp(pred, 0, 1)
+            target = train_batch[0][:,-1]
+            logger.log_image(key="train", images=[pred, target], caption=["prediction", "target"]) 
 
-    # predict on val images
-    val_iter = iter(datamodule.val_dataloader())
-    for _ in range(predict_batches):
-        val_batch = next(val_iter)
-        val_batch = [x.to("cuda" if torch.cuda.is_available() else "cpu") for x in val_batch]#TODO: make configurable?
-        pred = model.predict(val_batch)
-        if config["use_joints"]:
-            pred = pred[0]
-        pred = unnormalize(pred)
-        pred = torch.clamp(pred, 0, 1)
-        target = val_batch[0][:,-1]
-        logger.log_image(key="val", images=[pred, target], caption=["prediction", "target"])    
+        # predict on val images
+        val_iter = iter(datamodule.val_dataloader())
+        for _ in range(predict_batches):
+            val_batch = next(val_iter)
+            val_batch = [x.to("cuda" if torch.cuda.is_available() else "cpu") for x in val_batch]#TODO: make configurable?
+            pred = model.predict(val_batch)
+            if config["use_joints"]:
+                pred = pred[0]
+            pred = unnormalize(pred)
+            pred = torch.clamp(pred, 0, 1)
+            target = val_batch[0][:,-1]
+            logger.log_image(key="val", images=[pred, target], caption=["prediction", "target"])    
     
 
 def train_unsupervised(config, wandb_logger):
@@ -453,18 +454,19 @@ def test_supervised(config, wandb_logger, model, datamodule):
         cf_matrices_absolute_gen[:, 4:13, 4:13])
 
     wandb_logger.log_metrics({"test_accuracy": test_accuracy,
-                "test_sentence_wise_accuracy": sum(sentence_wise_accuracies_constant) / len(sentence_wise_accuracies_constant),
+                "test_sentence_wise_accuracy": np.mean(sentence_wise_accuracies_constant),
                 "test_action_accuracy": test_action_accuracy,
                 "test_color_accuracy": test_color_accuracy,
                 "test_object_accuracy": test_object_accuracy})
-    print_with_time(f"Test accuracy: {test_accuracy:8.4f}%")
+    print_with_time(f"Test accuracy: {np.mean(sentence_wise_accuracies_constant):8.4f}%")
 
+    
     wandb_logger.log_metrics({"generalization_test_accuracy": gen_test_accuracy,
-                "generalization_test_sentence_wise_accuracy": sum(sentence_wise_accuracies_gen)/len(sentence_wise_accuracies_gen),
+                "generalization_test_sentence_wise_accuracy": np.mean(sentence_wise_accuracies_gen),
                 "generalization_test_action_accuracy": gen_test_action_accuracy,
                 "generalization_test_color_accuracy": gen_test_color_accuracy,
                 "generalization_test_object_accuracy": gen_test_object_accuracy})
-    print_with_time(f"Generalization test accuracy: {gen_test_accuracy:8.4f}%")
+    print_with_time(f"Generalization test accuracy: {sentence_wise_accuracies_gen:8.4f}%")
 
 
 def main(args):
