@@ -57,6 +57,7 @@ class LstmEncoder(LightningModule):
             print_warning("Joints are not yet implemented in the LSTM model.")
         seq_len = x.shape[1]
 
+        outputs = []
         for t in range(seq_len):
             h_t, c_t = self.convlstm_1(input_tensor=x[:, t, :, :],
                                                cur_state=[h_t, c_t])
@@ -72,11 +73,13 @@ class LstmEncoder(LightningModule):
 
             h_t3, c_t3 = self.convlstm_3(input_tensor=h_t2_next,
                                                     cur_state=[h_t3, c_t3])
-        h_t3_next = self.maxpool(h_t3)
-        if self.dropout:
-            h_t3_next = self.dropout(h_t3_next)
+            h_t3_next = self.maxpool(h_t3)
+            if self.dropout:
+                h_t3_next = self.dropout(h_t3_next)
+            
+            outputs.append(h_t3_next)
 
-        return h_t3_next
+        return outputs
 
 
 class CnnDecoder(LightningModule):
@@ -179,10 +182,11 @@ class LstmAutoencoder(LightningModule):
         h_t3, c_t3 = self.encoder.convlstm_3.init_hidden(batch_size=b, image_size=(h//4, w//4))
 
         # autoencoder forward
-        encoder_vector = self.encoder(x, h_t, c_t, h_t2, c_t2, h_t3, c_t3)
-        output = self.decoder(encoder_vector)
-
-        return output
+        encoder_vectors = self.encoder(x, h_t, c_t, h_t2, c_t2, h_t3, c_t3)
+        outputs = []
+        for vec in encoder_vectors:
+            outputs.append(self.decoder(vec))
+        return torch.stack(outputs, dim=1)
 
     def training_step(self, batch, batch_idx):
         """Training step of the model. See step"""
@@ -210,9 +214,9 @@ class LstmAutoencoder(LightningModule):
         """
         x_frames, x_joints, _ = batch
         #TODO: add joints to the input
-        out = self(x_frames[:, :-1, :, :, :])
-        target = x_frames[:, -1, :, :, :]
-        loss = self.loss(out, target)
+        out = self(x_frames[:, :-1, :, :, :]) # feed all frames except the last one
+        target = x_frames[:, 1:, :, :, :] # target is the next frame respectively
+        loss = self.loss(out[self.init_length:], target[self.init_length:]) # only calculate loss for the frames after the initialization
         return loss
     
     def predict(self,batch):
@@ -229,7 +233,7 @@ class LstmAutoencoder(LightningModule):
             torch.Tensor: Predicted joints. Shape: (batch_size, num_joints) (Only if use_joints is True)
         """
         x_frames, x_joints, _ = batch
-        return self(x_frames[:, :-1, :, :, :])
+        return self(x_frames[:, :-1, :, :, :])[:,-1]
         
 
     def configure_optimizers(self):

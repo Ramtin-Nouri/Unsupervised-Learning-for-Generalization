@@ -466,7 +466,7 @@ def test_supervised(config, wandb_logger, model, datamodule):
                 "generalization_test_action_accuracy": gen_test_action_accuracy,
                 "generalization_test_color_accuracy": gen_test_color_accuracy,
                 "generalization_test_object_accuracy": gen_test_object_accuracy})
-    print_with_time(f"Generalization test accuracy: {sentence_wise_accuracies_gen:8.4f}%")
+    print_with_time(f"Generalization test accuracy: {np.mean(sentence_wise_accuracies_gen):8.4f}%")
 
 
 def main(args):
