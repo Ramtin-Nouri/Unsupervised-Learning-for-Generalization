@@ -47,8 +47,8 @@ class LstmEncoder(LightningModule):
 
         self.maxpool = nn.MaxPool3d(kernel_size=(1, 2, 2))
         self.dropout = None
-        if config["dropout"] > 0:
-            self.dropout = nn.Dropout(p=config["dropout"])
+        if config["dropout_autoencoder"] > 0:
+            self.dropout = nn.Dropout(p=config["dropout_autoencoder"])
 
     def forward(self, x, h_t, c_t):
         """Forward pass of the encoder.

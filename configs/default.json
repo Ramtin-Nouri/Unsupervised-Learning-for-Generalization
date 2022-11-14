@@ -11,12 +11,14 @@
     "use_joints": true,
     "output_dir": "output",
     "learning_rate": 0.001,
+    "early_stopping_patience": 10,
     "model":{
         "convlstm_layers":[64,64],
         "convolution_layers_decoder":[256,128,64,16],
         "lstm_num_layers": 2,
         "lstm_hidden_size": 512,
-        "dropout":0.2
+        "dropout_autoencoder":0,
+        "dropout_classifier":0.1
     },
     "dataset":{
         "data_path": "dataset/",

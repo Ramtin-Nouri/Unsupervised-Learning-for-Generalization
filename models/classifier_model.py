@@ -23,12 +23,18 @@ class ClassificationLstmDecoder(LightningModule):
         self.num_layers=config["lstm_num_layers"]
         self.sentence_length = config["sentence_length"]
         self.label_size = config["dictionary_size"]
-        input_size = config["convlstm_layers"][-1] * (config["width"]//8) * (config["height"]//8)
+
+        num_convlstm_layers = len(config["convlstm_layers"])
+        input_size = (config["width"]//2**num_convlstm_layers) * (config["height"]//2**num_convlstm_layers) * config["convlstm_layers"][-1]
 
         self.flatten = nn.Flatten()
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=self.hidden_size,
                             num_layers=self.num_layers, batch_first=True)
         self.linear = nn.Linear(self.hidden_size, config["dictionary_size"])
+
+
+        if config["dropout_classifier"] > 0:
+            self.dropout = nn.Dropout(p=config["dropout_classifier"])
 
     def forward(self, x):
         """ Forward pass of the decoder.
@@ -44,6 +50,7 @@ class ClassificationLstmDecoder(LightningModule):
         """
         hidden = self.init_hidden(x.shape[0], x.device)
         x = self.flatten(x)
+        x = self.dropout(x)
         x = x.unsqueeze(1)
         pred = torch.zeros((x.shape[0], self.sentence_length, self.label_size), device=x.device) 
         for i in range(self.sentence_length):

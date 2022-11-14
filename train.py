@@ -2,6 +2,7 @@ import argparse
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import LambdaCallback
+from pytorch_lightning.callbacks import EarlyStopping
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from datetime import datetime
@@ -54,7 +55,8 @@ def load_config(config_path, debug=False):
         input_stride=config_file.get("input_stride", default["input_stride"]),
         use_joints=config_file.get("use_joints", default["use_joints"]),
         output_dir=config_file.get("output_dir", default["output_dir"]),
-        learning_rate=config_file.get("learning_rate", default["learning_rate"])
+        learning_rate=config_file.get("learning_rate", default["learning_rate"]),
+        early_stopping_patience=config_file.get("early_stopping_patience", default["early_stopping_patience"])
     )
 
     # model architecture related configs
@@ -63,7 +65,8 @@ def load_config(config_path, debug=False):
     config["convolution_layers_decoder"] = model.get("convolution_layers_decoder", default["model"]["convolution_layers_decoder"])
     config["lstm_num_layers"] = model.get("lstm_num_layers", default["model"]["lstm_num_layers"])
     config["lstm_hidden_size"] = model.get("lstm_hidden_size", default["model"]["lstm_hidden_size"])
-    config["dropout"] = model.get("dropout", default["model"]["dropout"])
+    config["dropout_autoencoder"] = model.get("dropout_autoencoder", default["model"]["dropout_autoencoder"])
+    config["dropout_classifier"] = model.get("dropout_classifier", default["model"]["dropout_classifier"])
 
     # dataset related configs
     dataset = config_file.get("dataset", default["dataset"])
@@ -198,13 +201,15 @@ def train_unsupervised(config, wandb_logger):
     lambda_callback = LambdaCallback(on_epoch_end=lambda epoch, logs: 
                                      predict_train_val_images(unsupervised_datamodule, unsupervised_model, wandb_logger, config))
 
+    early_stopping = EarlyStopping(monitor="val_loss", patience=config["early_stopping_patience"], mode="min")
+
 
     unsupervised_trainer = pl.Trainer(
         accelerator="gpu",
         devices=config["gpus"],
         max_epochs=config["unsupervised_epochs"],
         logger=wandb_logger,
-        callbacks=[unsupervised_checkpt, lambda_callback],
+        callbacks=[unsupervised_checkpt, lambda_callback, early_stopping],
         log_every_n_steps=1,
         check_val_every_n_epoch=1
     )
@@ -269,12 +274,14 @@ def train_supervised(config, wandb_logger, encoder):
         filename='supervised_{epoch}-{val_loss:.3f}'
     )
 
+    early_stopping = EarlyStopping(monitor="val_loss", patience=config["early_stopping_patience"], mode="min")
+
     supervised_trainer = pl.Trainer(
         accelerator="gpu",
         devices=config["gpus"],
         max_epochs=config["epochs"],
         logger=wandb_logger,
-        callbacks=[supervised_checkpt],
+        callbacks=[supervised_checkpt, early_stopping],
         log_every_n_steps=1,
         check_val_every_n_epoch=1
     )

@@ -10,7 +10,7 @@
    	    "lstm_num_layers": 1,
     	"convlstm_layers": [16,16,16],
         "convolution_layers_decoder": [16,16,16],
-	    "dropout":0
+	    "dropout_autoencoder":0
     },
     "dataset":{
 	"num_training_samples_unsupervised":500
