@@ -146,6 +146,7 @@ class LstmAutoencoder(LightningModule):
         self.use_joints = config["use_joints"]
         self.num_joints = config["num_joints"]
         self.init_length = config["init_length"]
+        self.predict_ahead = config["predict_ahead"]
 
         self.encoder = LstmEncoder(config)
         self.decoder = CnnDecoder(config)
@@ -207,9 +208,10 @@ class LstmAutoencoder(LightningModule):
             torch.Tensor: Loss of the model
         """
         x_frames, x_joints, _ = batch
-        #TODO: add joints to the input
-        out = self(x_frames[:, :-1, :, :, :]) # feed all frames except the last one
-        target = x_frames[:, 1:, :, :, :] # target is the next frame respectively
+        # TODO: add joints to the input
+
+        out = self(x_frames[:, :-self.predict_ahead]) # feed all frames except the last one
+        target = x_frames[:, self.predict_ahead:] # target is the next frame respectively
         loss = self.loss(out[:,self.init_length:], target[:,self.init_length:]) # only calculate loss for the frames after the initialization
         return loss
     
@@ -227,7 +229,7 @@ class LstmAutoencoder(LightningModule):
             torch.Tensor: Predicted joints. Shape: (batch_size, num_joints) (Only if use_joints is True)
         """
         x_frames, x_joints, _ = batch
-        return self(x_frames[:, :-1, :, :, :])[:,-1]
+        return self(x_frames[:, :-self.predict_ahead, :, :, :])[:,-1]
         
 
     def configure_optimizers(self):

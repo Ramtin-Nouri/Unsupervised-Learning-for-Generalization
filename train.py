@@ -50,6 +50,7 @@ def load_config(config_path, debug=False):
         num_workers=config_file.get("num_workers", default["num_workers"]),
         input_length=config_file.get("input_length", default["input_length"]),
         init_length=config_file.get("init_length", default["init_length"]),
+        predict_ahead=config_file.get("predict_ahead", default["predict_ahead"]),
         input_stride=config_file.get("input_stride", default["input_stride"]),
         use_joints=config_file.get("use_joints", default["use_joints"]),
         output_dir=config_file.get("output_dir", default["output_dir"]),
