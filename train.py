@@ -214,15 +214,16 @@ def train_unsupervised(config, wandb_logger):
         check_val_every_n_epoch=1
     )
     unsupervised_trainer.fit(unsupervised_model, datamodule=unsupervised_datamodule)
-    # Log test images
-    i = 0
-    for batch in unsupervised_datamodule.test_dataloader(): #batch_size = 1
-        pred = unsupervised_model.predict(batch)
-        if config["use_joints"]:
-            pred = pred[0]
-        target = batch[0][0][-1]
-        wandb_logger.log_image(key=f"test_image", step=i, images=[pred, target], caption=["prediction", "target"])
-        i += 1
+    with torch.no_grad():
+        # Log test images
+        i = 0
+        for batch in tqdm(unsupervised_datamodule.test_dataloader(), desc="Test Unsupervised"): #batch_size = 1
+            pred = unsupervised_model.predict(batch)
+            if config["use_joints"]:
+                pred = pred[0]
+            target = batch[0][0][-1]
+            wandb_logger.log_image(key=f"test_image", step=i, images=[pred, target], caption=["prediction", "target"])
+            i += 1
 
     best = load_model(unsupervised_checkpt.best_model_path, is_unsupervised=True)
     return best

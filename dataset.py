@@ -275,7 +275,7 @@ class DataModule(LightningDataModule):
                 num_samples = 2000
 
         if self.config["debug"]:
-            num_samples = 10
+            num_samples = min(10,num_samples)
 
         return MultimodalSimulation(path=self.config["data_path"],
                                     visible_objects=visible_objects,
