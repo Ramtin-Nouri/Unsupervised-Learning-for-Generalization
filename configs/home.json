@@ -1,22 +1,23 @@
 {
     "gpus": 1,
-    "epochs": 10,
+    "epochs": 25,
     "unsupervised_epochs": 25,
     "batch_size": 1,
     "num_workers": 8,
-    "input_length": 15,
+    "input_length": 16,
     "learning_rate": 0.001,
-    "predict_ahead":3,
+    "predict_ahead":1,
 
     "use_joints": false,
     "model":{
-    	"convlstm_layers": [16,16,16,16],
-        "convolution_layers_decoder": [16,16,16,16],
-	    "dropout_autoencoder":0,
+    	"convlstm_layers": [16,32,32,64],
+        "convolution_layers_decoder": [64,64,64,64],
+        "dropout_autoencoder":0,
+        "dropout_classifier":0.1,
         "lstm_num_layers": 4,
-        "lstm_hidden_size": 64
+        "lstm_hidden_size": 256
     },
     "dataset":{
-        "num_training_samples_unsupervised": 250
+        "num_training_samples_unsupervised": 500
     }
 }

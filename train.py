@@ -481,6 +481,8 @@ def test_supervised(config, wandb_logger, model, datamodule):
 def main(args):
     pl.seed_everything(42, workers=True) # for reproducibility
     config = load_config(args.config, args.debug)
+    config["debug"] = args.debug # for the wandb logger
+    config["mode"] = args.mode 
     print("Config:", config)
 
     wandb_logger = WandbLogger(
