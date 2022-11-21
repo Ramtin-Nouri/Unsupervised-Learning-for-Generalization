@@ -32,7 +32,7 @@ class ClassificationLstmDecoder(LightningModule):
                             num_layers=self.num_layers, batch_first=True)
         self.linear = nn.Linear(self.hidden_size, config["dictionary_size"])
 
-
+        self.dropout = None
         if config["dropout_classifier"] > 0:
             self.dropout = nn.Dropout(p=config["dropout_classifier"])
 
@@ -50,7 +50,8 @@ class ClassificationLstmDecoder(LightningModule):
         """
         hidden = self.init_hidden(x.shape[0], x.device)
         x = self.flatten(x)
-        x = self.dropout(x)
+        if self.dropout is not None:
+            x = self.dropout(x)
         x = x.unsqueeze(1)
         pred = torch.zeros((x.shape[0], self.sentence_length, self.label_size), device=x.device) 
         for i in range(self.sentence_length):
