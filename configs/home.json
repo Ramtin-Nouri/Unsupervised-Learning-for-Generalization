@@ -4,7 +4,7 @@
     "batch_size": 1,
     "num_workers": 8,
     "early_stopping_patience": 5,
-    "predict_ahead":2,
+    "predict_ahead":1,
 
     "use_joints": false,
     "model":{
@@ -12,9 +12,5 @@
         "dropout_classifier":0.0,
         "lstm_num_layers": 1,
         "lstm_hidden_size": 512
-    },
-    "dataset":{
-        "num_training_samples_unsupervised": 500,
-	"num_validation_samples_unsupervised": 250
     }
 }
