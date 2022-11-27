@@ -1,7 +1,6 @@
 {
     "gpus": 1,
     "epochs": 10,
-    "unsupervised_epochs": 100,
     "batch_size": 8,
     "num_workers": 1,
     "input_length": 16,
@@ -14,10 +13,8 @@
     "early_stopping_patience": 10,
     "model":{
         "convlstm_layers":[64,64],
-        "convolution_layers_decoder":[256,128,64,16],
         "lstm_num_layers": 2,
         "lstm_hidden_size": 512,
-        "dropout_autoencoder":0,
         "dropout_classifier":0.1
     },
     "dataset":{
