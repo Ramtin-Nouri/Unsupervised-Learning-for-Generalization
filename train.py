@@ -10,7 +10,6 @@ import json
 import os
 import dataset
 from models.classifier_model import LstmClassifier
-from models.lstm_autoencoder import LstmAutoencoder
 from helper import *
 from evaluation import *
 
@@ -26,8 +25,6 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/default.json", required=True)
     parser.add_argument("--debug", type=bool, default=False)
-    parser.add_argument("--mode", type=str, default="both", required=True, help="supervised, unsupervised or both")
-    parser.add_argument("--unsupervised_model", type=str, default=None, help="path to unsupervised model. Has to be specified if mode is supervised")
 
     return parser.parse_args()
 
@@ -46,7 +43,6 @@ def load_config(config_path, debug=False):
     config = dict(
         gpus=config_file.get("gpus", default["gpus"]),
         epochs=config_file.get("epochs", default["epochs"]),
-        unsupervised_epochs=config_file.get("unsupervised_epochs", default["unsupervised_epochs"]),
         batch_size=config_file.get("batch_size", default["batch_size"]),
         num_workers=config_file.get("num_workers", default["num_workers"]),
         input_length=config_file.get("input_length", default["input_length"]),
@@ -62,10 +58,8 @@ def load_config(config_path, debug=False):
     # model architecture related configs
     model = config_file.get("model", default["model"])
     config["convlstm_layers"] = model.get("convlstm_layers", default["model"]["convlstm_layers"])
-    config["convolution_layers_decoder"] = model.get("convolution_layers_decoder", default["model"]["convolution_layers_decoder"])
     config["lstm_num_layers"] = model.get("lstm_num_layers", default["model"]["lstm_num_layers"])
     config["lstm_hidden_size"] = model.get("lstm_hidden_size", default["model"]["lstm_hidden_size"])
-    config["dropout_autoencoder"] = model.get("dropout_autoencoder", default["model"]["dropout_autoencoder"])
     config["dropout_classifier"] = model.get("dropout_classifier", default["model"]["dropout_classifier"])
 
     # dataset related configs
@@ -125,110 +119,7 @@ def load_config(config_path, debug=False):
     
     return config
 
-
-def predict_train_val_images(datamodule, model, logger, config):
-    """Predicts the images in the training and validation set and saves them to the logger.
-    Revert the normalization of the images before saving them.
-    Clamp the values to be between 0 and 1 s.t. the visialization is more clear.
-
-    Args:
-        datamodule (DataModule): The datamodule to use.
-        model (Model): The model to use.
-        logger (Logger): The logger to use.
-        config (dict): The config to use.
-    """
-    with torch.no_grad():
-        dataset_mean = [0.7605, 0.7042, 0.6045]
-        dataset_std = [0.1832, 0.2083, 0.2902]
-        unnormalize = transforms.Normalize(
-            mean=[-m / s for m, s in zip(dataset_mean, dataset_std)],
-            std=[1 / s for s in dataset_std],
-        )
-
-        predict_batches = 3
-        # predict on train images
-        train_iter = iter(datamodule.train_dataloader())
-        for _ in range(predict_batches):
-            train_batch = next(train_iter)
-            train_batch = [x.to("cuda" if torch.cuda.is_available() else "cpu") for x in train_batch]#TODO: make configurable?
-            pred = model.predict(train_batch)
-            if config["use_joints"]:
-                pred = pred[0]
-            pred = unnormalize(pred)
-            pred = torch.clamp(pred, 0, 1)
-            target = train_batch[0][:,-1]
-            logger.log_image(key="train", images=[pred, target], caption=["prediction", "target"]) 
-
-        # predict on val images
-        val_iter = iter(datamodule.val_dataloader())
-        for _ in range(predict_batches):
-            val_batch = next(val_iter)
-            val_batch = [x.to("cuda" if torch.cuda.is_available() else "cpu") for x in val_batch]#TODO: make configurable?
-            pred = model.predict(val_batch)
-            if config["use_joints"]:
-                pred = pred[0]
-            pred = unnormalize(pred)
-            pred = torch.clamp(pred, 0, 1)
-            target = val_batch[0][:,-1]
-            logger.log_image(key="val", images=[pred, target], caption=["prediction", "target"])    
-    
-
-def train_unsupervised(config, wandb_logger):
-    """Train the unsupervised model.
-
-    Args:
-        config (dict): Configuration dictionary.
-        wandb_logger (WandbLogger): WandB logger.
-
-    Returns:
-        LstmAutoencoder: Trained unsupervised model.
-    """
-    unsupervised_datamodule = dataset.DataModule(config, True)
-    unsupervised_model = LstmAutoencoder(config)
-    print("Unsupervised model:", unsupervised_model)
-    wandb_logger.watch(unsupervised_model, log="all")
-
-    unsupervised_checkpt = pl.callbacks.ModelCheckpoint(
-        dirpath=config["model_path"],
-        save_top_k=1,
-        save_weights_only=True,
-        verbose=True,
-        monitor="val_loss",
-        mode="min",
-        filename='unsupervised_{epoch}-{val_loss:.3f}'
-    )
-
-    lambda_callback = LambdaCallback(on_epoch_end=lambda epoch, logs: 
-                                     predict_train_val_images(unsupervised_datamodule, unsupervised_model, wandb_logger, config))
-
-    early_stopping = EarlyStopping(monitor="val_loss", patience=config["early_stopping_patience"], mode="min")
-
-
-    unsupervised_trainer = pl.Trainer(
-        accelerator="gpu",
-        devices=config["gpus"],
-        max_epochs=config["unsupervised_epochs"],
-        logger=wandb_logger,
-        callbacks=[unsupervised_checkpt, lambda_callback, early_stopping],
-        log_every_n_steps=1,
-        check_val_every_n_epoch=1
-    )
-    unsupervised_trainer.fit(unsupervised_model, datamodule=unsupervised_datamodule)
-    with torch.no_grad():
-        # Log test images
-        i = 0
-        for batch in tqdm(unsupervised_datamodule.test_dataloader(), desc="Test Unsupervised"): #batch_size = 1
-            pred = unsupervised_model.predict(batch)
-            if config["use_joints"]:
-                pred = pred[0]
-            target = batch[0][0][-1]
-            wandb_logger.log_image(key=f"test_image", step=i, images=[pred, target], caption=["prediction", "target"])
-            i += 1
-
-    best = load_model(unsupervised_checkpt.best_model_path, is_unsupervised=True)
-    return best
-
-def load_model(model_path, is_unsupervised, encoder=None):
+def load_model(model_path):
     """Load the model.
 
     Args:
@@ -242,14 +133,11 @@ def load_model(model_path, is_unsupervised, encoder=None):
     model_ckpt = torch.load(model_path)
     saved_config = model_ckpt["hyper_parameters"]["config"]
 
-    if is_unsupervised:
-        model = LstmAutoencoder(saved_config)
-    else:
-        model = LstmClassifier(saved_config, encoder)
+    model = LstmClassifier(saved_config)
     model.load_state_dict(model_ckpt["state_dict"])
     return model
 
-def train_supervised(config, wandb_logger, encoder):
+def train_supervised(config, wandb_logger):
     """Train the supervised model.
 
     Args:
@@ -262,7 +150,7 @@ def train_supervised(config, wandb_logger, encoder):
         datamodule (DataModule): Supervised datamodule.
     """
     supervised_datamodule = dataset.DataModule(config, False)
-    supervised_model = LstmClassifier(config, encoder)
+    supervised_model = LstmClassifier(config)
     print("Supervised model:", supervised_model)
     wandb_logger.watch(supervised_model, log="all")
 
@@ -288,7 +176,7 @@ def train_supervised(config, wandb_logger, encoder):
     )
     supervised_trainer.fit(supervised_model, datamodule=supervised_datamodule)
 
-    best = load_model(supervised_checkpt.best_model_path, is_unsupervised=False, encoder=encoder)
+    best = load_model(supervised_checkpt.best_model_path)
     return best,supervised_datamodule
 
 
@@ -482,7 +370,6 @@ def main(args):
     pl.seed_everything(42, workers=True) # for reproducibility
     config = load_config(args.config, args.debug)
     config["debug"] = args.debug # for the wandb logger
-    config["mode"] = args.mode 
     print("Config:", config)
 
     wandb_logger = WandbLogger(
@@ -493,24 +380,8 @@ def main(args):
     )
     wandb_logger.experiment.config.update(config)
 
-    if args.mode == "supervised":
-        if args.unsupervised_model is None:
-            print_fail("If mode is supervised, you must provide a path to an unsupervised model.")
-            exit(1)
-        unsupervised_model = load_model(args.unsupervised_model, is_unsupervised=True)
-    else:
-        # First Train Unsupervised model
-        unsupervised_model = train_unsupervised(config, wandb_logger)
-
-    if args.mode == "unsupervised":
-        print_with_time("Unsupervised training finished.")
-        return
-
-    # Use the trained model to get the latent space, dismiss its decoder
-    unsupervised_model = unsupervised_model.encoder
-
     # Train supervised model
-    supervised_model, supervised_data = train_supervised(config, wandb_logger, unsupervised_model)
+    supervised_model, supervised_data = train_supervised(config, wandb_logger)
 
     test_supervised(config, wandb_logger, supervised_model, supervised_data)
 

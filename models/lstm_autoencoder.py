@@ -4,71 +4,8 @@ import torch
 import numpy as np
 from einops import rearrange
 from helper import *
-from models.conv_lstm_cell import *
-
-class LstmEncoder(LightningModule):
-    """Encoder of the LSTM model. 
-    Uses ConvLSTM Cells to encode the input video.
-
-    Args:
-        config (dict): Dictionary containing the configuration of the model.
-
-    Attributes:
-        hidden_size (int): Hidden size of the LSTM.
-        num_layers (int): Number of layers of the LSTM.
-        use_joints (bool): Whether to use joints as input to the model.
-        num_joints (int): Number of joints.
-        conv_layers (nn.Sequential): Sequential model containing the convolutional layers.
-        dense_layers (nn.Sequential): Sequential model containing the dense layers.
-        lstm (nn.LSTM): LSTM model.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        convlstm_layers = config["convlstm_layers"] # e.g. [32,64,128]
-        self.use_joints = config["use_joints"]
-        in_chan = 3
-
-        convlstm_1 = ConvLSTMCell(input_dim=in_chan,
-                                               hidden_dim=convlstm_layers[0],
-                                               kernel_size=(3, 3),
-                                               bias=True)
-
-        self.convLSTMs = []
-        self.convLSTMs.append(convlstm_1)
-        for i in range(1, len(convlstm_layers)):
-            convlstm = ConvLSTMCell(input_dim=convlstm_layers[i-1],
-                                               hidden_dim=convlstm_layers[i],
-                                               kernel_size=(3, 3),
-                                               bias=True)
-            self.convLSTMs.append(convlstm)
-        self.convLSTMs = nn.ModuleList(self.convLSTMs)
 
 
-        self.maxpool = nn.MaxPool3d(kernel_size=(1, 2, 2))
-        self.dropout = None
-        if config["dropout_autoencoder"] > 0:
-            self.dropout = nn.Dropout(p=config["dropout_autoencoder"])
-
-    def forward(self, x, h_t, c_t):
-        """Forward pass of the encoder.
-        """
-        if self.use_joints:
-            #TODO: add the joints to the input
-            print_warning("Joints are not yet implemented in the LSTM model.")
-        seq_len = x.shape[1]
-
-        outputs = []
-        for t in range(seq_len):
-            x_t = x[:, t, :, :, :]
-            for i in range(len(self.convLSTMs)):
-                h_t[i], c_t[i] = self.convLSTMs[i](x_t, (h_t[i], c_t[i]))
-                x_t = self.maxpool(h_t[i])
-                if self.dropout is not None:
-                    x_t = self.dropout(x_t)
-            outputs.append(x_t)
-
-        return outputs
 
 
 class CnnDecoder(LightningModule):

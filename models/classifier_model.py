@@ -2,10 +2,84 @@ import torch
 from torch import nn
 from einops import rearrange
 from collections import OrderedDict
-from models.lstm_autoencoder import LstmEncoder
 from pytorch_lightning import LightningModule
 from helper import *
+from models.conv_lstm_cell import *
+from torchvision.models import resnet101
+import numpy as np
 
+
+class LstmEncoder(LightningModule):
+    """Encoder of the LSTM model. 
+    Uses ConvLSTM Cells to encode the input video.
+
+    Args:
+        config (dict): Dictionary containing the configuration of the model.
+
+    Attributes:
+        hidden_size (int): Hidden size of the LSTM.
+        num_layers (int): Number of layers of the LSTM.
+        use_joints (bool): Whether to use joints as input to the model.
+        num_joints (int): Number of joints.
+        conv_layers (nn.Sequential): Sequential model containing the convolutional layers.
+        dense_layers (nn.Sequential): Sequential model containing the dense layers.
+        lstm (nn.LSTM): LSTM model.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        convlstm_layers = config["convlstm_layers"] # e.g. [32,64,128]
+        self.use_joints = config["use_joints"]
+        mask_channels = 3
+        in_chan = 3+mask_channels
+
+        #self.vision_pre_model = get_layers_until(resnet101(pretrained=True), "layer3")
+
+        convlstm_1 = ConvLSTMCell(input_dim=in_chan,
+                                               hidden_dim=convlstm_layers[0],
+                                               kernel_size=(3, 3),
+                                               bias=True)
+
+        self.convLSTMs = []
+        self.convLSTMs.append(convlstm_1)
+        for i in range(1, len(convlstm_layers)):
+            convlstm = ConvLSTMCell(input_dim=convlstm_layers[i-1]+mask_channels,
+                                               hidden_dim=convlstm_layers[i],
+                                               kernel_size=(3, 3),
+                                               bias=True)
+            self.convLSTMs.append(convlstm)
+        self.convLSTMs = nn.ModuleList(self.convLSTMs)
+
+
+        self.maxpool = nn.MaxPool3d(kernel_size=(1, 2, 2))
+
+    def forward(self, x, mask, h_t, c_t):
+        """Forward pass of the encoder.
+
+        Args:
+            x (torch.Tensor): Input video. Shape: (batch_size, seq_len, channels, height, width).
+            mask (torch.Tensor): Mask of the input video.
+            h_t (torch.Tensor): Hidden state of the LSTM.
+            c_t (torch.Tensor): Cell state of the LSTM.
+        """
+        if self.use_joints:
+            #TODO: add the joints to the input
+            print_warning("Joints are not yet implemented in the LSTM model.")
+        seq_len = x.shape[1]
+
+        for t in range(seq_len):
+            x_t = x[:, t, :, :, :]
+            #with torch.no_grad():
+            #    x_t = self.vision_pre_model(x_t) # TODO:add
+
+            for i in range(len(self.convLSTMs)):
+                #add the mask to the input
+                mask_expanded = mask.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, x_t.shape[2], x_t.shape[3])
+                x_t = torch.cat((x_t, mask_expanded), dim=1)
+                h_t[i], c_t[i] = self.convLSTMs[i](x_t, (h_t[i], c_t[i]))
+                x_t = self.maxpool(h_t[i])
+
+        return x_t
 
 class ClassificationLstmDecoder(LightningModule):
     """ Decoder of the LSTM model for classification. 
@@ -33,6 +107,7 @@ class ClassificationLstmDecoder(LightningModule):
         self.linear = nn.Linear(self.hidden_size, config["dictionary_size"])
 
 
+        self.dropout = None
         if config["dropout_classifier"] > 0:
             self.dropout = nn.Dropout(p=config["dropout_classifier"])
 
@@ -50,7 +125,8 @@ class ClassificationLstmDecoder(LightningModule):
         """
         hidden = self.init_hidden(x.shape[0], x.device)
         x = self.flatten(x)
-        x = self.dropout(x)
+        if self.dropout is not None:
+            x = self.dropout(x)
         x = x.unsqueeze(1)
         pred = torch.zeros((x.shape[0], self.sentence_length, self.label_size), device=x.device) 
         for i in range(self.sentence_length):
@@ -82,7 +158,7 @@ class LstmClassifier(LightningModule):
         config (dict): Dictionary containing the configuration parameters.
         encoder (LstmEncoder): Trained encoder part of the LstmAutoencoder model.
     """
-    def __init__(self, config, encoder):
+    def __init__(self, config):
         super().__init__()
         self.save_hyperparameters()
 
@@ -92,15 +168,15 @@ class LstmClassifier(LightningModule):
         self.num_joints = config["num_joints"]
         self.sentence_length = config["sentence_length"]
 
-        self.encoder = encoder
-        self.encoder.requires_frad = False # Freeze the encoder 
+        self.encoder = LstmEncoder(config)
         self.decoder = ClassificationLstmDecoder(config)
+        self.masks = [[0,0,1], [0,1,0], [1,0,0], [0,1,1], [1,0,1], [1,1,0], [1,1,1]]
 
         self.loss_fn = nn.CrossEntropyLoss()
         self.reset_metrics_train()
         self.reset_metrics_val()
         
-    def forward(self, x_frames, x_joints=None):
+    def forward(self, x_frames, mask, x_joints=None):
         """ Forward pass of the model.
 
         Args:
@@ -126,7 +202,7 @@ class LstmClassifier(LightningModule):
             c_t.append(new_c)
 
         # autoencoder forward
-        encoder_out = self.encoder(x_frames, h_t, c_t)[-1]
+        encoder_out = self.encoder(x_frames, mask, h_t, c_t)
 
         # decode
         decoder_out = self.decoder(x=encoder_out)
@@ -141,7 +217,7 @@ class LstmClassifier(LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         return optimizer
     
-    def loss(self, output, labels):
+    def loss(self, output, labels, mask):
         """ Calculate the loss.
 
         Args:
@@ -153,7 +229,8 @@ class LstmClassifier(LightningModule):
         """
         loss = torch.zeros(1, device=output.device)
         for i in range(self.sentence_length):
-            loss += self.loss_fn(output[:, i, :], labels[:, i])
+            loss += self.loss_fn(output[:, i, :], labels[:, i]) * mask[:, i]
+        
         return loss
 
     def training_step(self, batch, batch_idx):
@@ -170,11 +247,17 @@ class LstmClassifier(LightningModule):
             torch.Tensor: Loss.
         """
         frames, joints, labels = batch
+        
+        # random mask for each input
+        mask_index = np.random.choice(len(self.masks), frames.shape[0])
+        mask = [self.masks[i] for i in mask_index]
+        mask = torch.tensor(mask, device=frames.device)
+
         if self.use_joints:
-            output = self(frames, joints)
+            output = self(frames, mask, joints)
         else:
-            output = self(frames)
-        loss = self.loss(output, labels)
+            output = self(frames, mask)
+        loss = self.loss(output, labels, mask)
         self.log('train_loss', loss)
         self.calculate_accuracy(output, labels, train=True)
         return loss
@@ -199,11 +282,13 @@ class LstmClassifier(LightningModule):
     def validation_step(self, batch, batch_idx):
         """ Same as training step."""
         frames, joints, labels = batch
+        mask = torch.ones(frames.size(0), 3, device=frames.device)
+
         if self.use_joints:
-            output = self(frames, joints)
+            output = self(frames, mask, joints)
         else:
-            output = self(frames)
-        loss = self.loss(output, labels)
+            output = self(frames, mask)
+        loss = self.loss(output, labels, mask)
         self.log('val_loss', loss)
         self.calculate_accuracy(output, labels, train=False)
         return loss
@@ -259,3 +344,30 @@ class LstmClassifier(LightningModule):
         self.val_color_correct = 0
         self.val_object_correct = 0
         self.val_total = 0
+
+
+def get_layers_until(model, layer_name):
+    """ Get all layers until a certain layer.
+    inspired by https://github.com/knowledgetechnologyuhh/grid-3d/blob/65856bd8bd68192807e477b8ad250dc12699ef2d/grid3d/utils.py#L30
+
+    Args:
+        model (torch.nn.Module): Model.
+        layer_name (str): Name of the layer.
+
+    Returns:
+        list: List of layers until the layer with the given name.
+    """
+    layers = list(model._modules.keys())
+    layer_count = 0
+    for layer in layers:
+        if layer != layer_name:
+            layer_count += 1
+        else:
+            break
+    for i in range(1, len(layers) - layer_count):
+        model._modules.pop(layers[-i])
+    feature_extractor = nn.Sequential(model._modules)
+    for param in feature_extractor.parameters():
+        param.requires_grad = False
+    feature_extractor.eval()
+    return feature_extractor
