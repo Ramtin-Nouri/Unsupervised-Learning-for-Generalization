@@ -168,6 +168,8 @@ class LstmClassifier(LightningModule):
         self.learning_rate = config["learning_rate"]
         self.num_joints = config["num_joints"]
         self.sentence_length = config["sentence_length"]
+        self.width = config["width"]
+        self.height = config["height"]
 
         self.encoder = LstmEncoder(config)
         self.decoder = ClassificationLstmDecoder(config)
@@ -250,13 +252,13 @@ class LstmClassifier(LightningModule):
         frames, joints, labels = batch
         
         # random mask for each input
-        mask = [np.random.choice(self.masks)]*frames.size(0) #each batch has the same mask
+        mask = [self.masks[np.random.choice(len(self.masks))]] * frames.size(0) #each batch has the same mask
         mask = torch.tensor(mask, device=frames.device)
 
         transformations = []
         transformations.append(RandomRotation(degrees=(0, 30)))
-        transformations.append(RandomResizedCrop(size=(config["height"], config["width"]), scale=(0.8, 1.0), ratio=(1.0, 1.0)))
-        if not mask[0,0]: #TODO verify sentence order is actually action, color, object
+        transformations.append(RandomResizedCrop(size=(self.height, self.width), scale=(0.8, 1.0), ratio=(1.0, 1.0)))
+        if not mask[0,0]:
             # if masking action, randomly flip
             transformations.append(RandomHorizontalFlip(p=0.3))
         
@@ -267,7 +269,7 @@ class LstmClassifier(LightningModule):
 
         if not mask[0,2]:
             # if masking object, randomly blur
-            transformations.append(GaussianBlur(kernel_size=3, sigma=(0, 5)))
+            transformations.append(GaussianBlur(kernel_size=3, sigma=(0.1, 5)))
 
 
         if self.use_joints:
