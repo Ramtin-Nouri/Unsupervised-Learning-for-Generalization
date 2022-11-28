@@ -69,8 +69,6 @@ def load_config(config_path, debug=False):
     config["data_path"] = dataset.get("data_path", default["dataset"]["data_path"])
     config["num_training_samples"] = dataset.get("num_training_samples", default["dataset"]["num_training_samples"])
     config["num_validation_samples"] = dataset.get("num_validation_samples", default["dataset"]["num_validation_samples"])
-    config["num_training_samples_unsupervised"] = dataset.get("num_training_samples_unsupervised", default["dataset"]["num_training_samples_unsupervised"])
-    config["num_validation_samples_unsupervised"] = dataset.get("num_validation_samples_unsupervised", default["dataset"]["num_validation_samples_unsupervised"])
     config["visible_objects"] = dataset.get("visible_objects", default["dataset"]["visible_objects"])
     config["different_colors"] = dataset.get("different_colors", default["dataset"]["different_colors"])
     config["different_objects"] = dataset.get("different_objects", default["dataset"]["different_objects"])
@@ -83,10 +81,7 @@ def load_config(config_path, debug=False):
     if debug:
         config["num_training_samples"] = 10
         config["num_validation_samples"] = 10
-        config["num_training_samples_unsupervised"] = 5
-        config["num_validation_samples_unsupervised"] = 5
         config["epochs"] = 1
-        config["unsupervised_epochs"] = 1
     config["debug"] = debug
     os.makedirs(config["output_dir"], exist_ok=True)
 
@@ -124,7 +119,6 @@ def load_model(model_path):
 
     Args:
         model_path (str): Path to the model.
-        is_unsupervised (bool): Whether the model is unsupervised.
 
     Returns:
         LstmClassifier or LstmAutoencoder: Loaded model.
@@ -143,7 +137,6 @@ def train_supervised(config, wandb_logger):
     Args:
         config (dict): Configuration dictionary.
         wandb_logger (WandbLogger): WandB logger.
-        encoder (LstmAutoencoder): Trained unsupervised model.
 
     Returns:
         LstmAutoencoder: Trained supervised model.
