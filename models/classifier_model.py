@@ -256,21 +256,24 @@ class LstmClassifier(LightningModule):
         mask = torch.tensor(mask, device=frames.device)
 
         transformations = []
-        transformations.append(RandomRotation(degrees=(0, 30)))
-        transformations.append(RandomResizedCrop(size=(self.height, self.width), scale=(0.8, 1.0), ratio=(1.0, 1.0)))
+        transformations.append(RandomRotation(degrees=(0, 25)))
         if not mask[0,0]:
             # if masking action, randomly flip
             transformations.append(RandomHorizontalFlip(p=0.3))
         
         if not mask[0,1]:
             # if masking color, randomly change color
-            transformations.append(ColorJitter(brightness=0.3, contrast=0.2, saturation=0.2, hue=0.5))
+            transformations.append(ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.5))
             transformations.append(RandomGrayscale(p=0.1))
 
         if not mask[0,2]:
             # if masking object, randomly blur
-            transformations.append(GaussianBlur(kernel_size=3, sigma=(0.1, 5)))
+            transformations.append(GaussianBlur(kernel_size=3, sigma=(0.1, 3)))
 
+        # apply transformations
+        compose = Compose(transformations)
+        for i in range(frames.size(0)):
+            frames[i] = compose(frames[i])
 
         if self.use_joints:
             output = self(frames, mask, joints)
