@@ -11,6 +11,7 @@
     "output_dir": "output",
     "learning_rate": 0.001,
     "early_stopping_patience": 10,
+    "data_augmentation": true,
     "model":{
         "convlstm_layers":[64,64],
         "lstm_num_layers": 2,
@@ -23,8 +24,6 @@
         "height": 224,
         "num_training_samples": 5000,
         "num_validation_samples": 2500,
-        "num_training_samples_unsupervised": 5000,
-        "num_validation_samples_unsupervised": 200,
         "visible_objects": 1,
         "different_colors": 1,
         "different_objects": 4,

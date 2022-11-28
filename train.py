@@ -52,7 +52,8 @@ def load_config(config_path, debug=False):
         use_joints=config_file.get("use_joints", default["use_joints"]),
         output_dir=config_file.get("output_dir", default["output_dir"]),
         learning_rate=config_file.get("learning_rate", default["learning_rate"]),
-        early_stopping_patience=config_file.get("early_stopping_patience", default["early_stopping_patience"])
+        early_stopping_patience=config_file.get("early_stopping_patience", default["early_stopping_patience"]),
+        data_augmentation=config_file.get("data_augmentation", default["data_augmentation"]),
     )
 
     # model architecture related configs

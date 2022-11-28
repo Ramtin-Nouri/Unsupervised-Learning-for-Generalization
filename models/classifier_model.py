@@ -170,6 +170,7 @@ class LstmClassifier(LightningModule):
         self.sentence_length = config["sentence_length"]
         self.width = config["width"]
         self.height = config["height"]
+        self.use_augmentation = config["data_augmentation"]
 
         self.encoder = LstmEncoder(config)
         self.decoder = ClassificationLstmDecoder(config)
@@ -255,25 +256,26 @@ class LstmClassifier(LightningModule):
         mask = [self.masks[np.random.choice(len(self.masks))]] * frames.size(0) #each batch has the same mask
         mask = torch.tensor(mask, device=frames.device)
 
-        transformations = []
-        transformations.append(RandomRotation(degrees=(0, 25)))
-        if not mask[0,0]:
-            # if masking action, randomly flip
-            transformations.append(RandomHorizontalFlip(p=0.3))
-        
-        if not mask[0,1]:
-            # if masking color, randomly change color
-            transformations.append(ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.5))
-            transformations.append(RandomGrayscale(p=0.1))
+        if self.use_augmentation:
+            transformations = []
+            transformations.append(RandomRotation(degrees=(0, 25)))
+            if not mask[0,0]:
+                # if masking action, randomly flip
+                transformations.append(RandomHorizontalFlip(p=0.3))
+            
+            if not mask[0,1]:
+                # if masking color, randomly change color
+                transformations.append(ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.5))
+                transformations.append(RandomGrayscale(p=0.1))
 
-        if not mask[0,2]:
-            # if masking object, randomly blur
-            transformations.append(GaussianBlur(kernel_size=3, sigma=(0.1, 3)))
+            if not mask[0,2]:
+                # if masking object, randomly blur
+                transformations.append(GaussianBlur(kernel_size=3, sigma=(0.1, 3)))
 
-        # apply transformations
-        compose = Compose(transformations)
-        for i in range(frames.size(0)):
-            frames[i] = compose(frames[i])
+            # apply transformations
+            compose = Compose(transformations)
+            for i in range(frames.size(0)):
+                frames[i] = compose(frames[i])
 
         if self.use_joints:
             output = self(frames, mask, joints)
