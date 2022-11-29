@@ -34,16 +34,16 @@ class LstmEncoder(LightningModule):
         self.height = config["height"]
         self.width = config["width"]
         mask_channels = 3
-        self.use_resnet = True # Todo: read from config
+        self.use_resnet = config["use_resnet"]
         if self.use_resnet:
             in_chan = 256
             self.height = int(round(self.height/16))
             self.width = int(round(self.width/16))
+            self.vision_pre_model = get_layers_until(resnet18(pretrained=True), "layer3")
         else:
             in_chan = 3
         in_chan += mask_channels
 
-        self.vision_pre_model = get_layers_until(resnet18(pretrained=True), "layer3")
 
         convlstm_1 = ConvLSTMCell(input_dim=in_chan,
                                                hidden_dim=convlstm_layers[0],
@@ -79,8 +79,9 @@ class LstmEncoder(LightningModule):
 
         for t in range(seq_len):
             x_t = x[:, t, :, :, :]
-            with torch.no_grad():
-                x_t = self.vision_pre_model(x_t)
+            if self.use_resnet:
+                with torch.no_grad():
+                    x_t = self.vision_pre_model(x_t)
 
             for i in range(len(self.convLSTMs)):
                 #add the mask to the input
@@ -128,7 +129,7 @@ class ClassificationLstmDecoder(LightningModule):
         self.label_size = config["dictionary_size"]
         height = config["height"]
         width = config["width"]
-        self.use_resnet = True # Todo: read from config
+        self.use_resnet = config["use_resnet"]
         if self.use_resnet:
             height = int(round(height/16))
             width = int(round(width/16))

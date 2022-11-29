@@ -16,7 +16,8 @@
         "convlstm_layers":[64,64],
         "lstm_num_layers": 2,
         "lstm_hidden_size": 512,
-        "dropout_classifier":0.1
+        "dropout_classifier":0.1,
+        "use_resnet": false
     },
     "dataset":{
         "data_path": "dataset/",
