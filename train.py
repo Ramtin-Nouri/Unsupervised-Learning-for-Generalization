@@ -62,6 +62,7 @@ def load_config(config_path, debug=False):
     config["lstm_num_layers"] = model.get("lstm_num_layers", default["model"]["lstm_num_layers"])
     config["lstm_hidden_size"] = model.get("lstm_hidden_size", default["model"]["lstm_hidden_size"])
     config["dropout_classifier"] = model.get("dropout_classifier", default["model"]["dropout_classifier"])
+    config["use_resnet"] = model.get("use_resnet", default["model"]["use_resnet"])
 
     # dataset related configs
     dataset = config_file.get("dataset", default["dataset"])
