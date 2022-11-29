@@ -5,7 +5,7 @@ from collections import OrderedDict
 from pytorch_lightning import LightningModule
 from helper import *
 from models.conv_lstm_cell import *
-from torchvision.models import resnet101
+from torchvision.models import resnet18
 from torchvision.transforms import *
 import numpy as np
 
@@ -31,10 +31,19 @@ class LstmEncoder(LightningModule):
         super().__init__()
         convlstm_layers = config["convlstm_layers"] # e.g. [32,64,128]
         self.use_joints = config["use_joints"]
+        self.height = config["height"]
+        self.width = config["width"]
         mask_channels = 3
-        in_chan = 3+mask_channels
+        self.use_resnet = True # Todo: read from config
+        if self.use_resnet:
+            in_chan = 256
+            self.height = int(round(self.height/16))
+            self.width = int(round(self.width/16))
+        else:
+            in_chan = 3
+        in_chan += mask_channels
 
-        #self.vision_pre_model = get_layers_until(resnet101(pretrained=True), "layer3")
+        self.vision_pre_model = get_layers_until(resnet18(pretrained=True), "layer3")
 
         convlstm_1 = ConvLSTMCell(input_dim=in_chan,
                                                hidden_dim=convlstm_layers[0],
@@ -70,8 +79,8 @@ class LstmEncoder(LightningModule):
 
         for t in range(seq_len):
             x_t = x[:, t, :, :, :]
-            #with torch.no_grad():
-            #    x_t = self.vision_pre_model(x_t) # TODO:add
+            with torch.no_grad():
+                x_t = self.vision_pre_model(x_t)
 
             for i in range(len(self.convLSTMs)):
                 #add the mask to the input
@@ -81,6 +90,25 @@ class LstmEncoder(LightningModule):
                 x_t = self.maxpool(h_t[i])
 
         return x_t
+
+    def init_hidden(self, batch_size):
+        """Initializes the hidden state of the LSTM.
+
+        Args:
+            batch_size (int): Batch size.
+
+        Returns:
+            array of torch.Tensor: Hidden states of the LSTM.
+            array of torch.Tensor: Cell states of the LSTM.
+        """
+        # initialize hidden states
+        h_t = []
+        c_t = []
+        for i in range(len(self.convLSTMs)):
+            new_h, new_c = self.convLSTMs[i].init_hidden(batch_size, image_size=(self.height//2**i, self.width//2**i))
+            h_t.append(new_h)
+            c_t.append(new_c)
+        return h_t, c_t
 
 class ClassificationLstmDecoder(LightningModule):
     """ Decoder of the LSTM model for classification. 
@@ -98,9 +126,15 @@ class ClassificationLstmDecoder(LightningModule):
         self.num_layers=config["lstm_num_layers"]
         self.sentence_length = config["sentence_length"]
         self.label_size = config["dictionary_size"]
+        height = config["height"]
+        width = config["width"]
+        self.use_resnet = True # Todo: read from config
+        if self.use_resnet:
+            height = int(round(height/16))
+            width = int(round(width/16))
 
         num_convlstm_layers = len(config["convlstm_layers"])
-        input_size = (config["width"]//2**num_convlstm_layers) * (config["height"]//2**num_convlstm_layers) * config["convlstm_layers"][-1]
+        input_size = (width//2**num_convlstm_layers) * (height//2**num_convlstm_layers) * config["convlstm_layers"][-1]
 
         self.flatten = nn.Flatten()
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=self.hidden_size,
@@ -196,13 +230,7 @@ class LstmClassifier(LightningModule):
         # find size of different input dimensions
         b, seq_len, _, h, w = x_frames.size()
 
-         # initialize hidden states
-        h_t = []
-        c_t = []
-        for i in range(len(self.encoder.convLSTMs)):
-            new_h, new_c = self.encoder.convLSTMs[i].init_hidden(b, image_size=(h//2**i, w//2**i))
-            h_t.append(new_h)
-            c_t.append(new_c)
+        h_t, c_t = self.encoder.init_hidden(b)
 
         # autoencoder forward
         encoder_out = self.encoder(x_frames, mask, h_t, c_t)
