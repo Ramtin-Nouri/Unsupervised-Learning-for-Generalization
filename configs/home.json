@@ -3,13 +3,13 @@
     "epochs": 50,
     "batch_size": 1,
     "num_workers": 8,
-    "early_stopping_patience": 5,
+    "early_stopping_patience": 8,
     "predict_ahead":1,
 
     "use_joints": false,
     "model":{
-    	"convlstm_layers": [16],
-        "dropout_classifier":0.0,
+    	"convlstm_layers": [8,16,32,64],
+        "dropout_classifier":0,
         "lstm_num_layers": 1,
         "lstm_hidden_size": 512
     }
