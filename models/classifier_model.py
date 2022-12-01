@@ -142,7 +142,6 @@ class ClassificationLstmDecoder(LightningModule):
                             num_layers=self.num_layers, batch_first=True)
         self.linear = nn.Linear(self.hidden_size, config["dictionary_size"])
 
-
         self.dropout = None
         if config["dropout_classifier"] > 0:
             self.dropout = nn.Dropout(p=config["dropout_classifier"])

@@ -159,18 +159,21 @@ def train_supervised(config, wandb_logger):
     )
 
     early_stopping = EarlyStopping(monitor="val_loss", patience=config["early_stopping_patience"], mode="min")
+    callbacks = [supervised_checkpt, early_stopping] if not config["debug"] else []
 
     supervised_trainer = pl.Trainer(
         accelerator="gpu",
         devices=config["gpus"],
         max_epochs=config["epochs"],
         logger=wandb_logger,
-        callbacks=[supervised_checkpt, early_stopping],
+        callbacks=callbacks,
         log_every_n_steps=1,
         check_val_every_n_epoch=1
     )
     supervised_trainer.fit(supervised_model, datamodule=supervised_datamodule)
 
+    if config["debug"]:
+        return supervised_model, supervised_datamodule
     best = load_model(supervised_checkpt.best_model_path)
     return best,supervised_datamodule
 
