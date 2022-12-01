@@ -203,13 +203,14 @@ def train_unsupervised(config, wandb_logger):
 
     early_stopping = EarlyStopping(monitor="val_loss", patience=config["early_stopping_patience"], mode="min")
 
+    callbacks = [unsupervised_checkpt, lambda_callback, early_stopping] if not config["debug"] else [lambda_callback]
 
     unsupervised_trainer = pl.Trainer(
         accelerator="gpu",
         devices=config["gpus"],
         max_epochs=config["unsupervised_epochs"],
         logger=wandb_logger,
-        callbacks=[unsupervised_checkpt, lambda_callback, early_stopping],
+        callbacks=callbacks,
         log_every_n_steps=1,
         check_val_every_n_epoch=1
     )
@@ -225,6 +226,8 @@ def train_unsupervised(config, wandb_logger):
             wandb_logger.log_image(key=f"test_image", step=i, images=[pred, target], caption=["prediction", "target"])
             i += 1
 
+    if config["debug"]:
+        return unsupervised_model
     best = load_model(unsupervised_checkpt.best_model_path, is_unsupervised=True)
     return best
 
@@ -276,18 +279,21 @@ def train_supervised(config, wandb_logger, encoder):
     )
 
     early_stopping = EarlyStopping(monitor="val_loss", patience=config["early_stopping_patience"], mode="min")
+    callbacks = [supervised_checkpt, early_stopping] if not config["debug"] else []
 
     supervised_trainer = pl.Trainer(
         accelerator="gpu",
         devices=config["gpus"],
         max_epochs=config["epochs"],
         logger=wandb_logger,
-        callbacks=[supervised_checkpt, early_stopping],
+        callbacks=callbacks,
         log_every_n_steps=1,
         check_val_every_n_epoch=1
     )
     supervised_trainer.fit(supervised_model, datamodule=supervised_datamodule)
 
+    if config["debug"]:
+        return supervised_model, supervised_datamodule
     best = load_model(supervised_checkpt.best_model_path, is_unsupervised=False, encoder=encoder)
     return best,supervised_datamodule
 
