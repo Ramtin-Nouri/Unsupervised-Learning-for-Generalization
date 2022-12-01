@@ -4,12 +4,12 @@
     "batch_size": 1,
     "num_workers": 8,
     "use_joints": false,
-    "early_stopping_patience": 5,
+    "early_stopping_patience": 8,
 
     "model":{
     	"lstm_hidden_size": 512,
    	    "lstm_num_layers": 1,
-    	"convlstm_layers": [64],
-        "dropout_classifier":0.1
+    	"convlstm_layers": [16,16,16],
+        "dropout_classifier":0
     }
 }
