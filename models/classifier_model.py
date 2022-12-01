@@ -299,7 +299,7 @@ class LstmClassifier(LightningModule):
 
             if not mask[0,2]:
                 # if masking object, randomly blur
-                transformations.append(GaussianBlur(kernel_size=3, sigma=(0.1, 3)))
+                transformations.append(GaussianBlur(kernel_size=7, sigma=(0.1, 3)))
 
             # apply transformations
             compose = Compose(transformations)
