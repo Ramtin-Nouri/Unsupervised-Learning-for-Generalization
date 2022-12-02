@@ -2,8 +2,9 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 from torchvision import transforms as T
-from torchvision.transforms import functional_tensor as F
+from torchvision.transforms import functional as F
 from torchvision.utils import _log_api_usage_once
+from typing import List, Tuple
 
 class DataAugmentation():
     """ Data augmentation class for the training set.
@@ -43,12 +44,14 @@ class DataAugmentation():
             torchvision.transforms.Compose: Composition of the transformations to apply.
         """
         transformations = []
-        # add generic transformations
-        transformations.append(T.RandomRotation(degrees=(0, 25)))
+        
+        # transformations.append(T.RandomRotation(degrees=(0, 25)))
         if augment_action:
             # if masking action, randomly flip
             transformations.append(T.RandomHorizontalFlip(p=0.3))
-            # transformations.append(RandomSequenceFlip(p=0.3))
+            transformations.append(Affine((0,359)))
+        else:
+            transformations.append(Affine((-30,30)))
         
         if augment_color:
             # if masking color, randomly change color
@@ -92,7 +95,7 @@ class RandomSequenceFlip(nn.Module):
         If the image is torch Tensor, it is expected
         to have [...,T, C, H, W] shape, where ... means an arbitrary number of leading
         dimensions.
-        Implementation very similar to the one in torchvision.transforms.functional_tensor.hflip.
+        Implementation very similar to the one in torchvision.transforms.functional.hflip.
 
         Args:
             img (Tensor): Image to be flipped.
@@ -100,6 +103,53 @@ class RandomSequenceFlip(nn.Module):
         Returns:
             Tensor:  Temporally flipped image.
         """
-        F._assert_image_tensor(img)
-
         return img.flip(-4)
+
+class Affine(nn.Module):
+    """Variation of PyTorch's affine transformation that keeps relevant pixels in the image.
+
+    The maximum scale and translation are calculated based on the sampled angle.
+    Some of the values are hard-coded for simplicity and may not generalize well to other image sizes.
+    
+    Args:
+        degrees (list): Range of degrees to sample from.
+    """
+    def __init__(self,degrees=[0,359]):
+        super().__init__()
+        self.degrees = degrees
+
+    @staticmethod
+    def get_params(degrees: List[float]) -> Tuple[float, float, Tuple[float, float]]:
+        """Get parameters for affine transformation.
+
+        Returns:
+            float: angle parameter to be passed to rotate
+            float: scale parameter to be passed to rotate
+            tuple: translate parameter to be passed to rotate
+        """
+        angle = float(torch.empty(1).uniform_(float(degrees[0]), float(degrees[1])).item())
+        if angle < 0:
+            angle += 360 # angle must be positive for calculations below
+            
+        min_scale = 0.5
+        if angle < 90:
+            max_scale = 1.2 - min_scale* (angle)/90
+        elif angle < 180:
+            max_scale = 1.2 - min_scale* (180-angle)/90
+        elif angle < 270:
+            max_scale = 1.2 - min_scale* (270-angle)/90
+        else:
+            max_scale = 1.2 - min_scale* (360-angle)/90
+
+        scale = torch.empty(1).uniform_(min_scale, max_scale).item()
+        
+        max_dx = 150*(1.2-scale)
+        max_dy = 10
+        tx = int(round(torch.empty(1).uniform_(-max_dx, max_dx).item()))
+        ty = int(round(torch.empty(1).uniform_(-max_dy, max_dy).item()))
+        translations = (tx, ty)
+        return angle, scale, translations
+        
+    def forward(self, x):
+        angle, scale, translate = self.get_params(self.degrees)
+        return F.affine(x, angle=angle, translate=translate, scale=scale, shear=0)
