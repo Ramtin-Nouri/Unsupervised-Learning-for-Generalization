@@ -8,7 +8,7 @@
 
     "use_joints": false,
     "model":{
-    	"convlstm_layers": [8,16,32,64],
+    	"convlstm_layers": [16,16,16],
         "dropout_classifier":0,
         "lstm_num_layers": 1,
         "lstm_hidden_size": 512
