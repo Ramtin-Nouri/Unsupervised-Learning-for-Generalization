@@ -374,114 +374,75 @@ def test_supervised(config, wandb_logger, model, datamodule):
     cf_matrices_absolute = np.zeros((6, 19, 19))
     cf_matrices_absolute_gen = np.zeros((6, 19, 19))
 
-    sentence_wise_accuracies_constant = []
-    sentence_wise_accuracies_gen = []
-    for i in range(1, 7):
-        #create_dataset(self, visible_objects, different_colors, different_objects, exclusive_colors, part):
-        test_data = datamodule.create_dataset(i, 0, 0, False, "constant-test")
-        gen_test_data = datamodule.create_dataset(i, 0, 0, False, "generalization-test")
+    i = config["visible_objects"]
+    test_data = datamodule.create_dataset(i, 0, 0, False, "constant-test")
+    gen_test_data = datamodule.create_dataset(i, 0, 0, False, "generalization-test")
 
         # dataloader
-        test_loader = DataLoader(dataset=test_data, batch_size=config["batch_size"], shuffle=False,
+    test_loader = DataLoader(dataset=test_data, batch_size=config["batch_size"], shuffle=False,
+                                num_workers=config["num_workers"])
+    gen_test_loader = DataLoader(dataset=gen_test_data, batch_size=config["batch_size"], shuffle=False,
                                     num_workers=config["num_workers"])
-        gen_test_loader = DataLoader(dataset=gen_test_data, batch_size=config["batch_size"], shuffle=False,
-                                        num_workers=config["num_workers"])
 
-        confusion_matrix_absolute, wrong_predictions, sentence_wise_accuracy = get_evaluation(model, test_loader, device, f"V{i} test")
-        confusion_matrix_absolute_gen, wrong_predictions_gen, sentence_wise_accuracy_gen = get_evaluation(model, gen_test_loader, device, f"V{i} generalization test")
+    confusion_matrix_absolute, wrong_predictions, sentence_wise_accuracy = get_evaluation(model, test_loader, device, f"V{i} test")
+    confusion_matrix_absolute_gen, wrong_predictions_gen, sentence_wise_accuracy_gen = get_evaluation(model, gen_test_loader, device, f"V{i} generalization test")
 
-        sentence_wise_accuracies_constant.append(sentence_wise_accuracy)
-        sentence_wise_accuracies_gen.append(sentence_wise_accuracy_gen)
+    confusion_matrix_relative = get_relative_confusion_matrix(confusion_matrix_absolute)
+    confusion_matrix_relative_gen = get_relative_confusion_matrix(confusion_matrix_absolute_gen)
 
-        confusion_matrix_relative = get_relative_confusion_matrix(confusion_matrix_absolute)
-        confusion_matrix_relative_gen = get_relative_confusion_matrix(confusion_matrix_absolute_gen)
+    plt = create_confusion_matrix_plt(confusion_matrix_absolute,
+                                        f"V{i}-test-absolute-{config['run_name']}", False)
+    wandb_logger.log_image(key=f"V{i}-test-absolute", images=[plt])
+    plt.close()
 
-        plt = create_confusion_matrix_plt(confusion_matrix_absolute,
-                                            f"V{i}-test-absolute-{config['run_name']}", False)
-        wandb_logger.log_image(key=f"V{i}-test-absolute", images=[plt])
-        plt.close()
+    plt = create_confusion_matrix_plt(confusion_matrix_relative,
+                                        f"V{i}-test-relative-{config['run_name']}", True)
+    wandb_logger.log_image(key=f"V{i}-test-relative", images=[plt])
+    plt.close()
 
-        plt = create_confusion_matrix_plt(confusion_matrix_relative,
-                                            f"V{i}-test-relative-{config['run_name']}", True)
-        wandb_logger.log_image(key=f"V{i}-test-relative", images=[plt])
-        plt.close()
+    plt = create_confusion_matrix_plt(confusion_matrix_absolute_gen,
+                                        f"V{i}-generalization-test-absolute-{config['run_name']}", False)
+    wandb_logger.log_image(key=f"V{i}-generalization-test-absolute", images=[plt])
+    plt.close()
 
-        plt = create_confusion_matrix_plt(confusion_matrix_absolute_gen,
-                                            f"V{i}-generalization-test-absolute-{config['run_name']}", False)
-        wandb_logger.log_image(key=f"V{i}-generalization-test-absolute", images=[plt])
-        plt.close()
+    plt = create_confusion_matrix_plt(confusion_matrix_relative_gen,
+                                        f"V{i}-generalization-test-relative-{config['run_name']}", True)
+    wandb_logger.log_image(key=f"V{i}-generalization-test-relative", images=[plt])
+    plt.close()
 
-        plt = create_confusion_matrix_plt(confusion_matrix_relative_gen,
-                                            f"V{i}-generalization-test-relative-{config['run_name']}", True)
-        wandb_logger.log_image(key=f"V{i}-generalization-test-relative", images=[plt])
-        plt.close()
+    test_accuracy = np.trace(confusion_matrix_absolute) * 100 / np.sum(confusion_matrix_absolute)
+    test_action_accuracy = np.trace(confusion_matrix_absolute[:4, :4]) * 100 / np.sum(
+        confusion_matrix_absolute[:4, :4])
+    test_color_accuracy = np.trace(confusion_matrix_absolute[13:19, 13:19]) * 100 / np.sum(
+        confusion_matrix_absolute[13:19, 13:19])
+    test_object_accuracy = np.trace(confusion_matrix_absolute[4:13, 4:13]) * 100 / np.sum(
+        confusion_matrix_absolute[4:13, 4:13])
 
-        test_accuracy = np.trace(confusion_matrix_absolute) * 100 / np.sum(confusion_matrix_absolute)
-        test_action_accuracy = np.trace(confusion_matrix_absolute[:4, :4]) * 100 / np.sum(
-            confusion_matrix_absolute[:4, :4])
-        test_color_accuracy = np.trace(confusion_matrix_absolute[13:19, 13:19]) * 100 / np.sum(
-            confusion_matrix_absolute[13:19, 13:19])
-        test_object_accuracy = np.trace(confusion_matrix_absolute[4:13, 4:13]) * 100 / np.sum(
-            confusion_matrix_absolute[4:13, 4:13])
+    gen_test_accuracy = np.trace(confusion_matrix_absolute_gen) * 100 / np.sum(confusion_matrix_absolute_gen)
+    gen_test_action_accuracy = np.trace(confusion_matrix_absolute_gen[:4, :4]) * 100 / np.sum(
+        confusion_matrix_absolute_gen[:4, :4])
+    gen_test_color_accuracy = np.trace(confusion_matrix_absolute_gen[13:19, 13:19]) * 100 / np.sum(
+        confusion_matrix_absolute_gen[13:19, 13:19])
+    gen_test_object_accuracy = np.trace(confusion_matrix_absolute_gen[4:13, 4:13]) * 100 / np.sum(
+        confusion_matrix_absolute_gen[4:13, 4:13])
 
-        gen_test_accuracy = np.trace(confusion_matrix_absolute_gen) * 100 / np.sum(confusion_matrix_absolute_gen)
-        gen_test_action_accuracy = np.trace(confusion_matrix_absolute_gen[:4, :4]) * 100 / np.sum(
-            confusion_matrix_absolute_gen[:4, :4])
-        gen_test_color_accuracy = np.trace(confusion_matrix_absolute_gen[13:19, 13:19]) * 100 / np.sum(
-            confusion_matrix_absolute_gen[13:19, 13:19])
-        gen_test_object_accuracy = np.trace(confusion_matrix_absolute_gen[4:13, 4:13]) * 100 / np.sum(
-            confusion_matrix_absolute_gen[4:13, 4:13])
+    cf_matrices_absolute[i - 1] = confusion_matrix_absolute
+    cf_matrices_absolute_gen[i - 1] = confusion_matrix_absolute_gen
 
-        cf_matrices_absolute[i - 1] = confusion_matrix_absolute
-        cf_matrices_absolute_gen[i - 1] = confusion_matrix_absolute_gen
-
-        wandb_logger.log_metrics({f"V{i}-test_sentence_wise_accuracy": sentence_wise_accuracy,
-                    f"V{i}-test_accuracy": test_accuracy,
-                    f"V{i}-test_action_accuracy": test_action_accuracy,
-                    f"V{i}-test_color_accuracy": test_color_accuracy,
-                    f"V{i}-test_object_accuracy": test_object_accuracy,
-                    f"V{i}-generalization_test_sentence_wise_accuracy": sentence_wise_accuracy_gen,
-                    f"V{i}-generalization_test_accuracy": gen_test_accuracy,
-                    f"V{i}-generalization_test_action_accuracy": gen_test_action_accuracy,
-                    f"V{i}-generalization_test_color_accuracy": gen_test_color_accuracy,
-                    f"V{i}-generalization_test_object_accuracy": gen_test_object_accuracy,
-                    f"V{i}-test_wrong_predictions": wrong_predictions,
-                    f"V{i}-generalization_test_wrong_predictions": wrong_predictions_gen})
-
-    test_accuracy = np.sum(np.trace(cf_matrices_absolute, axis1=1, axis2=2)) * 100 / np.sum(cf_matrices_absolute)
-    test_action_accuracy = np.sum(np.trace(cf_matrices_absolute[:, :4, :4], axis1=1, axis2=2)) * 100 / np.sum(
-        cf_matrices_absolute[:, :4, :4])
-    test_color_accuracy = np.sum(np.trace(cf_matrices_absolute[:, 13:19, 13:19], axis1=1, axis2=2)) * 100 / np.sum(
-        cf_matrices_absolute[:, 13:19, 13:19])
-    test_object_accuracy = np.sum(np.trace(cf_matrices_absolute[:, 4:13, 4:13], axis1=1, axis2=2)) * 100 / np.sum(
-        cf_matrices_absolute[:, 4:13, 4:13])
-
-    gen_test_accuracy = np.sum(np.trace(cf_matrices_absolute_gen, axis1=1, axis2=2)) * 100 / np.sum(
-        cf_matrices_absolute_gen)
-    gen_test_action_accuracy = np.sum(
-        np.trace(cf_matrices_absolute_gen[:, :4, :4], axis1=1, axis2=2)) * 100 / np.sum(
-        cf_matrices_absolute_gen[:, :4, :4])
-    gen_test_color_accuracy = np.sum(
-        np.trace(cf_matrices_absolute_gen[:, 13:19, 13:19], axis1=1, axis2=2)) * 100 / np.sum(
-        cf_matrices_absolute_gen[:, 13:19, 13:19])
-    gen_test_object_accuracy = np.sum(
-        np.trace(cf_matrices_absolute_gen[:, 4:13, 4:13], axis1=1, axis2=2)) * 100 / np.sum(
-        cf_matrices_absolute_gen[:, 4:13, 4:13])
-
-    wandb_logger.log_metrics({"test_accuracy": test_accuracy,
-                "test_sentence_wise_accuracy": np.mean(sentence_wise_accuracies_constant),
-                "test_action_accuracy": test_action_accuracy,
-                "test_color_accuracy": test_color_accuracy,
-                "test_object_accuracy": test_object_accuracy})
-    print_with_time(f"Test accuracy: {np.mean(sentence_wise_accuracies_constant):8.4f}%")
-
-    
-    wandb_logger.log_metrics({"generalization_test_accuracy": gen_test_accuracy,
-                "generalization_test_sentence_wise_accuracy": np.mean(sentence_wise_accuracies_gen),
-                "generalization_test_action_accuracy": gen_test_action_accuracy,
-                "generalization_test_color_accuracy": gen_test_color_accuracy,
-                "generalization_test_object_accuracy": gen_test_object_accuracy})
-    print_with_time(f"Generalization test accuracy: {np.mean(sentence_wise_accuracies_gen):8.4f}%")
+    wandb_logger.log_metrics({f"V{i}-test_sentence_wise_accuracy": sentence_wise_accuracy,
+                f"V{i}-test_accuracy": test_accuracy,
+                f"V{i}-test_action_accuracy": test_action_accuracy,
+                f"V{i}-test_color_accuracy": test_color_accuracy,
+                f"V{i}-test_object_accuracy": test_object_accuracy,
+                f"V{i}-generalization_test_sentence_wise_accuracy": sentence_wise_accuracy_gen,
+                f"V{i}-generalization_test_accuracy": gen_test_accuracy,
+                f"V{i}-generalization_test_action_accuracy": gen_test_action_accuracy,
+                f"V{i}-generalization_test_color_accuracy": gen_test_color_accuracy,
+                f"V{i}-generalization_test_object_accuracy": gen_test_object_accuracy,
+                f"V{i}-test_wrong_predictions": wrong_predictions,
+                f"V{i}-generalization_test_wrong_predictions": wrong_predictions_gen})
+    print_with_time(f"Test accuracy: {np.mean(sentence_wise_accuracy):8.4f}%")
+    print_with_time(f"Generalization test accuracy: {np.mean(sentence_wise_accuracy_gen):8.4f}%")
 
 
 def main(args):
