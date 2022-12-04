@@ -49,9 +49,9 @@ class DataAugmentation():
         if augment_action:
             # if masking action, randomly flip
             transformations.append(T.RandomHorizontalFlip(p=0.3))
-            transformations.append(Affine((0,359)))
+            transformations.append(Affine(45)) # roughly from -180 to 180 degrees
         else:
-            transformations.append(Affine((-30,30)))
+            transformations.append(Affine(10)) # roughly from -30 to 30 degrees
         
         if augment_color:
             # if masking color, randomly change color
@@ -114,12 +114,12 @@ class Affine(nn.Module):
     Args:
         degrees (list): Range of degrees to sample from.
     """
-    def __init__(self,degrees=[0,359]):
+    def __init__(self,sigma):
         super().__init__()
-        self.degrees = degrees
+        self.sigma = sigma
 
     @staticmethod
-    def get_params(degrees: List[float]) -> Tuple[float, float, Tuple[float, float]]:
+    def get_params(sigma: float) -> Tuple[float, float, Tuple[float, float]]:
         """Get parameters for affine transformation.
 
         Returns:
@@ -127,7 +127,7 @@ class Affine(nn.Module):
             float: scale parameter to be passed to rotate
             tuple: translate parameter to be passed to rotate
         """
-        angle = float(torch.empty(1).uniform_(float(degrees[0]), float(degrees[1])).item())
+        angle = float(torch.empty(1).normal_(0, sigma).item())
         if angle < 0:
             angle += 360 # angle must be positive for calculations below
             
@@ -151,5 +151,5 @@ class Affine(nn.Module):
         return angle, scale, translations
         
     def forward(self, x):
-        angle, scale, translate = self.get_params(self.degrees)
+        angle, scale, translate = self.get_params(self.sigma)
         return F.affine(x, angle=angle, translate=translate, scale=scale, shear=0)
