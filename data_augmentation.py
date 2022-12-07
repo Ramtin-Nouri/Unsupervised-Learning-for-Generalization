@@ -45,13 +45,10 @@ class DataAugmentation():
         """
         transformations = []
         
-        # transformations.append(T.RandomRotation(degrees=(0, 25)))
+        transformations.append(T.RandomRotation(degrees=(0, 25)))
         if augment_action:
             # if masking action, randomly flip
             transformations.append(T.RandomHorizontalFlip(p=0.3))
-            transformations.append(Affine(45)) # roughly from -180 to 180 degrees
-        else:
-            transformations.append(Affine(10)) # roughly from -30 to 30 degrees
         
         if augment_color:
             # if masking color, randomly change color
