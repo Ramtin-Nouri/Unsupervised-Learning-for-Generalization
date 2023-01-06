@@ -316,7 +316,7 @@ class LstmClassifier(LightningModule):
         self.reset_metrics_train()
         print_with_time(f"Epoch {self.current_epoch} train acc: {epoch_acc}")
     
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
         """ Same as training step."""
         frames, joints, labels = batch
         mask = torch.ones(frames.size(0), 3, device=frames.device)
@@ -326,8 +326,14 @@ class LstmClassifier(LightningModule):
         else:
             output = self(frames, mask)
         loss = self.loss(output, labels, mask)
-        self.log('val_loss', loss)
-        self.calculate_accuracy(output, labels, train=False)
+        lossname = f'val_loss'
+        if dataloader_idx == 1:
+            lossname += '_gen'
+        self.log(lossname, loss)
+        
+        if dataloader_idx == 0:
+            self.calculate_accuracy(output, labels, train=False)
+        # TODO: calculate accuracy for each dataloader
         return loss
     
     def validation_epoch_end(self, outputs):

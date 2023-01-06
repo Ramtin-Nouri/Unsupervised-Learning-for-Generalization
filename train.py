@@ -197,7 +197,7 @@ def test_supervised(config, wandb_logger, model, datamodule):
         f"Final training")
     val_confusion_matrix_absolute, final_val_wrong_predictions, final_val_sentence_wise_accuracy = get_evaluation(
         model,
-        datamodule.val_dataloader(),
+        datamodule.val_dataloader()[0],
         device,
         f"Final validation")
 
