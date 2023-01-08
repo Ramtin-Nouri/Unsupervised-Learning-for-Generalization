@@ -283,7 +283,7 @@ class DataModule(LightningDataModule):
                 num_samples = 500
                 part="generalization-test"
             elif part == "generalization-test":
-                num_samples = 2000
+                num_samples = 1500
                 offset = 500
             elif part == "constant-test":
                 num_samples = 2000
