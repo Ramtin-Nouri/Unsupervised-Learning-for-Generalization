@@ -10,6 +10,7 @@ import json
 import os
 import dataset
 from models.classifier_model import LstmClassifier
+from models.transformer import SwinTransformer
 from helper import *
 from evaluation import *
 
@@ -58,11 +59,13 @@ def load_config(config_path, debug=False):
 
     # model architecture related configs
     model = config_file.get("model", default["model"])
-    config["convlstm_layers"] = model.get("convlstm_layers", default["model"]["convlstm_layers"])
-    config["lstm_num_layers"] = model.get("lstm_num_layers", default["model"]["lstm_num_layers"])
-    config["lstm_hidden_size"] = model.get("lstm_hidden_size", default["model"]["lstm_hidden_size"])
-    config["dropout_classifier"] = model.get("dropout_classifier", default["model"]["dropout_classifier"])
-    config["use_resnet"] = model.get("use_resnet", default["model"]["use_resnet"])
+    config["model_type"] = model.get("type", default["model"]["type"]) #'lstm' or 'transformer
+    if config["model_type"] == "lstm":
+        config["convlstm_layers"] = model.get("convlstm_layers", default["model"]["convlstm_layers"])
+        config["lstm_num_layers"] = model.get("lstm_num_layers", default["model"]["lstm_num_layers"])
+        config["lstm_hidden_size"] = model.get("lstm_hidden_size", default["model"]["lstm_hidden_size"])
+        config["dropout_classifier"] = model.get("dropout_classifier", default["model"]["dropout_classifier"])
+        config["use_resnet"] = model.get("use_resnet", default["model"]["use_resnet"])
 
     # dataset related configs
     dataset = config_file.get("dataset", default["dataset"])
@@ -129,7 +132,10 @@ def load_model(model_path):
     model_ckpt = torch.load(model_path)
     saved_config = model_ckpt["hyper_parameters"]["config"]
 
-    model = LstmClassifier(saved_config)
+    if saved_config["model_type"] == "lstm":
+        model = LstmClassifier(saved_config)
+    elif saved_config["model_type"] == "transformer":
+        model = SwinTransformer(saved_config)
     model.load_state_dict(model_ckpt["state_dict"])
     return model
 
@@ -145,7 +151,10 @@ def train_supervised(config, wandb_logger):
         datamodule (DataModule): Supervised datamodule.
     """
     supervised_datamodule = dataset.DataModule(config, False)
-    supervised_model = LstmClassifier(config)
+    if config["model_type"] == "lstm":
+        supervised_model = LstmClassifier(config)
+    elif config["model_type"] == "transformer":
+        supervised_model = SwinTransformer(config)
     print("Supervised model:", supervised_model)
     wandb_logger.watch(supervised_model, log="all")
 
