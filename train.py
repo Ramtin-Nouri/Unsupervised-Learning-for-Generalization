@@ -162,7 +162,7 @@ def train_supervised(config, wandb_logger):
         dirpath=config["model_path"],
         save_top_k=1,
         verbose=True,
-        monitor="val_loss_gen/dataloader_idx_1",
+        monitor="val_loss/dataloader_idx_0",
         mode="min",
         filename='supervised_{epoch}-{val_loss:.3f}'
     )
