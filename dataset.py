@@ -45,7 +45,7 @@ class MultimodalSimulation(Dataset):
                            "red", "green", "blue", "yellow", "white", "brown"]
     LABEL_LENGTH = 19
     def __init__(self, path, part, visible_objects, different_actions, different_colors, different_objects,
-                 exclusive_colors, num_samples, input_length=16, frame_stride=1, transform=None, debug=False):
+                 exclusive_colors, num_samples, input_length=16, frame_stride=1, transform=None, debug=False, offset=0):
 
         assert isinstance(path, str) and isinstance(part, str)
         assert part in ["training", "validation", "constant-test", "generalization-test"]
@@ -72,6 +72,7 @@ class MultimodalSimulation(Dataset):
         self.num_samples = min(num_samples, max_samples_per_dir)
         self.transform = transform
         self.debug = debug
+        self.offset = offset
 
     def __len__(self):
         """Returns the number of samples in the dataset."""
@@ -99,7 +100,7 @@ class MultimodalSimulation(Dataset):
             dir_path = f"{self.path}/{self.part}/V{dir_number}-generalization-test"
         else:
             dir_path = f"{self.path}/V{dir_number}-A{self.different_actions}-C{self.different_colors}-O{self.different_objects}{'-X' if self.exclusive_colors else ''}/{self.part}"
-        sequence_path = f"{dir_path}/sequence_{item:04d}"
+        sequence_path = f"{dir_path}/sequence_{item+self.offset:04d}"
 
         # reading sentence out of label.npy - NOT one-hot-encoded
         label = torch.from_numpy(np.load(f"{sequence_path}/label.npy")).to(dtype=torch.uint8)
@@ -205,7 +206,7 @@ class DataModule(LightningDataModule):
         self.transform = normal_transform
         
         self.train_loader = None
-        self.val_loader = None
+        self.val_loaders = None
 
     def prepare_data(self):
         pass
@@ -247,18 +248,25 @@ class DataModule(LightningDataModule):
 
             training_data = self.create_dataset(visible_objects, colors, different_objects, exclusive_colors, "training")
             validation_data = self.create_dataset(visible_objects, colors, different_objects, exclusive_colors, "validation")
+            generalization_validation_data = self.create_dataset(visible_objects, 0, 0, False, "generalization-validation")
 
         # dataloader
         self.train_loader = DataLoader(dataset=training_data, batch_size=self.config["batch_size"], shuffle=True,
                                 num_workers=self.config["num_workers"])
-        self.val_loader = DataLoader(dataset=validation_data, batch_size=self.config["batch_size"], shuffle=False,
+        val_loader = DataLoader(dataset=validation_data, batch_size=self.config["batch_size"], shuffle=False,
                                 num_workers=self.config["num_workers"])
+        generalization_val_loader = DataLoader(dataset=generalization_validation_data, batch_size=self.config["batch_size"],
+                                shuffle=False, num_workers=self.config["num_workers"])
+        # self.val_loaders = {"validation": val_loader, "generalization-validation": generalization_val_loader}
+        self.val_loaders = [val_loader, generalization_val_loader]
+
 
     def create_dataset(self, visible_objects, different_colors, different_objects, exclusive_colors, part):
         """ Create a dataset for a specific configuration.
         
         Just a wrapper for the MultimodalSimulation class, that uses some globally defined parameters.
         """
+        offset = 0
         if self.unsupervised:
             if part == "training":
                 num_samples = self.config["num_training_samples_unsupervised"]
@@ -271,8 +279,16 @@ class DataModule(LightningDataModule):
                 num_samples = self.config["num_training_samples"]
             elif part == "validation":
                 num_samples = self.config["num_validation_samples"]
-            else:
+            elif part == "generalization-validation":
+                num_samples = 500
+                part="generalization-test"
+            elif part == "generalization-test":
+                num_samples = 1500
+                offset = 500
+            elif part == "constant-test":
                 num_samples = 2000
+            else:
+                raise ValueError(f"Unknown part {part}")
 
         if self.config["debug"]:
             num_samples = min(10,num_samples)
@@ -288,7 +304,8 @@ class DataModule(LightningDataModule):
                                     input_length=self.config["input_length"],
                                     frame_stride=self.config["input_stride"],
                                     transform=self.transform,
-                                    debug=self.config["debug"])
+                                    debug=self.config["debug"],
+                                    offset=offset)
 
     def train_dataloader(self):
         """ Return the train dataloader."""
@@ -296,7 +313,7 @@ class DataModule(LightningDataModule):
 
     def val_dataloader(self):
         """ Return the validation dataloader."""
-        return self.val_loader
+        return self.val_loaders
     
     def test_dataloader(self):
         """ Return the test dataloader."""

@@ -1,10 +1,10 @@
 {
-    "gpus": 1,
+    "gpus": [1],
     "epochs": 50,
     "batch_size": 1,
     "num_workers": 8,
     "use_joints": false,
-    "early_stopping_patience": 8,
+    "early_stopping_patience": 10,
 
     "model":{
     	"lstm_hidden_size": 512,

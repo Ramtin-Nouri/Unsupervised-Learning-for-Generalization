@@ -52,6 +52,7 @@ class DataAugmentation():
         
         if augment_color:
             # if masking color, randomly change color
+            # transformations.append(RandomColorShift(0.2))
             transformations.append(T.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.5))
             transformations.append(T.RandomGrayscale(p=0.1))
 
@@ -150,3 +151,24 @@ class Affine(nn.Module):
     def forward(self, x):
         angle, scale, translate = self.get_params(self.sigma)
         return F.affine(x, angle=angle, translate=translate, scale=scale, shear=0)
+
+class RandomColorShift(nn.Module):
+    """Randomly shift the color channels of the given image sequence.
+
+    Args:
+        sigma (float): Standard deviation of the normal distribution to sample from.
+    """
+
+    def __init__(self, sigma):
+        super().__init__()
+        self.sigma = sigma
+        
+    def forward(self, img):
+        for c in range(3):
+            r = float(torch.empty(1).normal_(1, self.sigma).item())
+            r = max(0,r) # cannot be <0
+            img[c] = F.adjust_brightness(img[c],r)
+        return img
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}(sigma={self.sigma})'

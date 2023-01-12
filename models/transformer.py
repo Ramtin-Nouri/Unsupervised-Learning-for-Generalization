@@ -149,7 +149,7 @@ class SwinTransformer(LightningModule):
         self.reset_metrics_train()
         print_with_time(f"Epoch {self.current_epoch} train acc: {epoch_acc}")
     
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
         """ Same as training step."""
         frames, joints, labels = batch
         # TODO: add joints
@@ -157,8 +157,15 @@ class SwinTransformer(LightningModule):
 
         output = self(frames, mask)
         loss = self.loss(output, labels, mask)
-        self.log('val_loss', loss)
-        self.calculate_accuracy(output, labels, train=False)
+        lossname = f'val_loss'
+        if dataloader_idx == 1:
+            lossname += '_gen'
+        self.log(lossname, loss)
+        
+        if dataloader_idx == 0:
+            self.calculate_accuracy(output, labels, train=False, gen=False)
+        else:
+            self.calculate_accuracy(output, labels, train=False, gen=True)
         return loss
     
     def validation_epoch_end(self, outputs):
@@ -174,7 +181,7 @@ class SwinTransformer(LightningModule):
         self.reset_metrics_val()
         print_with_time(f"Epoch {self.current_epoch} val_acc: {epoch_acc}")
 
-    def calculate_accuracy(self, output, labels, train=True):
+    def calculate_accuracy(self, output, labels, train=True, gen=False):
         """ Calculate the accuracy of the model.
 
         Args:
@@ -192,12 +199,21 @@ class SwinTransformer(LightningModule):
             self.training_object_correct += torch.sum(object_output_batch == labels[:, 2])
 
             self.training_total += labels.shape[0]
+        elif gen:
+            # generalization validation
+            self.val_gen_action_correct += torch.sum(action_output_batch == labels[:, 0])
+            self.val_gen_color_correct += torch.sum(color_output_batch == labels[:, 1])
+            self.val_gen_object_correct += torch.sum(object_output_batch == labels[:, 2])
+
+            self.val_gen_total += labels.shape[0]
         else:
+            # normal validation
             self.val_action_correct += torch.sum(action_output_batch == labels[:, 0])
             self.val_color_correct += torch.sum(color_output_batch == labels[:, 1])
             self.val_object_correct += torch.sum(object_output_batch == labels[:, 2])
 
             self.val_total += labels.shape[0]
+
 
     def reset_metrics_train(self):
         """Reset metrics for training"""
@@ -208,10 +224,16 @@ class SwinTransformer(LightningModule):
     
     def reset_metrics_val(self):
         """Reset metrics for validation"""
+        # normal validation
         self.val_action_correct = 0
         self.val_color_correct = 0
         self.val_object_correct = 0
         self.val_total = 0
+        # generalization validation
+        self.val_gen_action_correct = 0
+        self.val_gen_color_correct = 0
+        self.val_gen_object_correct = 0
+        self.val_gen_total = 0
 
 
 def get_layers_until(model, layer_name):
