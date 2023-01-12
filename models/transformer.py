@@ -68,9 +68,7 @@ class SwinTransformer(LightningModule):
         pred2 = self.linear2(x) # (batch_size, label_size) i.e. (batch_size, 19)
         pred3 = self.linear3(x) # (batch_size, label_size) i.e. (batch_size, 19)
 
-        print("PRED SHAPE", pred1.shape)
         stack = torch.stack([pred1, pred2, pred3], dim=1) # (batch_size, sentence_length, label_size) i.e. (batch_size, 3, 19)
-        print("STACK SHAPE", stack.shape)
         return stack
         
 
