@@ -92,7 +92,10 @@ def get_evaluation(model, data_loader, device, description=""):
         for (frames_batch, joints_batch, label_batch) in tqdm(data_loader, desc=description):
             frames_batch = frames_batch.to(device=device)  # (N, L, c, w, h)
             joints_batch = joints_batch.to(device=device)  # (N, L, j)
-            mask = torch.ones(frames_batch.size(0), 3, device=frames_batch.device)
+            if "transformer" in str(type(model)).lower():
+                mask = torch.ones(frames_batch.size(0), frames_batch.size(1), 3, device=frames_batch.device)
+            else:
+                mask = torch.ones(frames_batch.size(0), 3, device=frames_batch.device)
 
             output_batch = model(frames_batch, mask, joints_batch)
 

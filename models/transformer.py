@@ -40,7 +40,7 @@ class SwinTransformer(LightningModule):
         self.reset_metrics_train()
         self.reset_metrics_val()
         
-    def forward(self, x_frames, mask):
+    def forward(self, x_frames, mask,joints=None):
         """ Forward pass of the model.
 
         Args:
