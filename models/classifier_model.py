@@ -51,7 +51,7 @@ class LstmEncoder(LightningModule):
         self.convLSTMs = []
         self.convLSTMs.append(convlstm_1)
         for i in range(1, len(convlstm_layers)):
-            convlstm = ConvLSTMCell(input_dim=convlstm_layers[i-1]+mask_channels,
+            convlstm = ConvLSTMCell(input_dim=convlstm_layers[i-1],
                                                hidden_dim=convlstm_layers[i],
                                                kernel_size=(3, 3),
                                                bias=True)
@@ -81,10 +81,10 @@ class LstmEncoder(LightningModule):
                 with torch.no_grad():
                     x_t = self.vision_pre_model(x_t)
 
+            #add the mask to the input
+            mask_expanded = mask.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, x_t.shape[2], x_t.shape[3])
+            x_t = torch.cat((x_t, mask_expanded), dim=1)
             for i in range(len(self.convLSTMs)):
-                #add the mask to the input
-                mask_expanded = mask.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, x_t.shape[2], x_t.shape[3])
-                x_t = torch.cat((x_t, mask_expanded), dim=1)
                 h_t[i], c_t[i] = self.convLSTMs[i](x_t, (h_t[i], c_t[i]))
                 x_t = self.maxpool(h_t[i])
 
