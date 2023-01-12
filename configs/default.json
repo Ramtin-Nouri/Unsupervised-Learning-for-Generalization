@@ -13,6 +13,7 @@
     "early_stopping_patience": 10,
     "data_augmentation": true,
     "model":{
+        "type": "lstm",
         "convlstm_layers":[64,64],
         "lstm_num_layers": 2,
         "lstm_hidden_size": 512,
