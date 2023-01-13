@@ -167,7 +167,7 @@ def train_supervised(config, wandb_logger):
         filename='supervised_{epoch}-{val_loss:.3f}'
     )
 
-    early_stopping = EarlyStopping(monitor="val_loss_gen/dataloader_idx_1", patience=config["early_stopping_patience"], mode="min")
+    early_stopping = EarlyStopping(monitor="val_loss/dataloader_idx_0", patience=config["early_stopping_patience"], mode="min")
     callbacks = [supervised_checkpt, early_stopping] if not config["debug"] else []
 
     supervised_trainer = pl.Trainer(
