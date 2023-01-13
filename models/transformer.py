@@ -30,7 +30,7 @@ class SwinTransformer(LightningModule):
         self.masks = [[0,0,1], [0,1,0], [1,0,0], [0,1,1], [1,0,1], [1,1,0], [1,1,1]]
 
         self.conv3d = nn.Conv3d(6,3,2) # RGB+Mask -> 3 channels
-        self.transformer = torchvision.models.video.swin3d_t()
+        self.transformer = torchvision.models.video.swin3d_b()
         self.hidden_size = self.transformer.head.out_features
         self.linear1 = nn.Linear(self.hidden_size, config["dictionary_size"])
         self.linear2 = nn.Linear(self.hidden_size, config["dictionary_size"])
@@ -178,6 +178,17 @@ class SwinTransformer(LightningModule):
         self.log('val_acc_color', epoch_color_acc, on_step=False, on_epoch=True)
         self.log('val_acc_object', epoch_object_acc, on_step=False, on_epoch=True)
         self.log('val_acc', epoch_acc, on_step=False, on_epoch=True)
+
+        # generalization validation
+        epoch_action_acc = self.val_gen_action_correct * 100 / self.val_gen_total
+        epoch_color_acc = self.val_gen_color_correct * 100 / self.val_gen_total
+        epoch_object_acc = self.val_gen_object_correct * 100 / self.val_gen_total
+        epoch_acc = (epoch_action_acc + epoch_color_acc + epoch_object_acc) / 3
+        self.log('val_acc_action_gen', epoch_action_acc, on_step=False, on_epoch=True)
+        self.log('val_acc_color_gen', epoch_color_acc, on_step=False, on_epoch=True)
+        self.log('val_acc_object_gen', epoch_object_acc, on_step=False, on_epoch=True)
+        self.log('val_acc_gen', epoch_acc, on_step=False, on_epoch=True)
+
         self.reset_metrics_val()
         print_with_time(f"Epoch {self.current_epoch} val_acc: {epoch_acc}")
 
