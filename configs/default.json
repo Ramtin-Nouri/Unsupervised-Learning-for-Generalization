@@ -1,6 +1,7 @@
 {
     "gpus": 1,
     "epochs": 10,
+    "unsupervised_epochs": 100,
     "batch_size": 8,
     "num_workers": 1,
     "input_length": 16,
@@ -14,6 +15,8 @@
     "data_augmentation": true,
     "model":{
         "convlstm_layers":[64,64],
+        "convolution_layers_decoder":[64,64,64,64],
+        "dropout_autoencoder":0,
         "lstm_num_layers": 2,
         "lstm_hidden_size": 512,
         "dropout_classifier":0.1,
@@ -25,6 +28,8 @@
         "height": 224,
         "num_training_samples": 5000,
         "num_validation_samples": 2500,
+        "num_training_samples_unsupervised": 500,
+        "num_validation_samples_unsupervised": 200,
         "visible_objects": 1,
         "different_colors": 1,
         "different_objects": 4,

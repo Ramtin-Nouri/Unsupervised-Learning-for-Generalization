@@ -255,10 +255,13 @@ class DataModule(LightningDataModule):
                                 num_workers=self.config["num_workers"])
         val_loader = DataLoader(dataset=validation_data, batch_size=self.config["batch_size"], shuffle=False,
                                 num_workers=self.config["num_workers"])
-        generalization_val_loader = DataLoader(dataset=generalization_validation_data, batch_size=self.config["batch_size"],
+        if self.unsupervised:
+            generalization_val_loader = None
+            self.val_loaders = val_loader
+        else:
+            generalization_val_loader = DataLoader(dataset=generalization_validation_data, batch_size=self.config["batch_size"],
                                 shuffle=False, num_workers=self.config["num_workers"])
-        # self.val_loaders = {"validation": val_loader, "generalization-validation": generalization_val_loader}
-        self.val_loaders = [val_loader, generalization_val_loader]
+            self.val_loaders = [val_loader, generalization_val_loader]
 
 
     def create_dataset(self, visible_objects, different_colors, different_objects, exclusive_colors, part):

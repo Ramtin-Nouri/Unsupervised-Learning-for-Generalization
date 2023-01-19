@@ -3,14 +3,15 @@
     "epochs": 50,
     "batch_size": 1,
     "num_workers": 8,
-    "early_stopping_patience": 8,
+    "early_stopping_patience": 10,
     "predict_ahead":1,
 
     "use_joints": false,
     "model":{
-    	"convlstm_layers": [16,16,16],
+    	"convlstm_layers": [16,32,32,64],
+        "convolution_layers_decoder": [64,64,64,64],
         "dropout_classifier":0,
         "lstm_num_layers": 1,
-        "lstm_hidden_size": 512
+        "lstm_hidden_size": 128
     }
 }
