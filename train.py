@@ -60,12 +60,11 @@ def load_config(config_path, debug=False):
     # model architecture related configs
     model = config_file.get("model", default["model"])
     config["model_type"] = model.get("type", default["model"]["type"]) #'lstm' or 'transformer
-    if config["model_type"] == "lstm":
-        config["convlstm_layers"] = model.get("convlstm_layers", default["model"]["convlstm_layers"])
-        config["lstm_num_layers"] = model.get("lstm_num_layers", default["model"]["lstm_num_layers"])
-        config["lstm_hidden_size"] = model.get("lstm_hidden_size", default["model"]["lstm_hidden_size"])
-        config["dropout_classifier"] = model.get("dropout_classifier", default["model"]["dropout_classifier"])
-        config["use_resnet"] = model.get("use_resnet", default["model"]["use_resnet"])
+    config["convlstm_layers"] = model.get("convlstm_layers", default["model"]["convlstm_layers"])
+    config["lstm_num_layers"] = model.get("lstm_num_layers", default["model"]["lstm_num_layers"])
+    config["lstm_hidden_size"] = model.get("lstm_hidden_size", default["model"]["lstm_hidden_size"])
+    config["dropout_classifier"] = model.get("dropout_classifier", default["model"]["dropout_classifier"])
+    config["use_resnet"] = model.get("use_resnet", default["model"]["use_resnet"])
 
     # dataset related configs
     dataset = config_file.get("dataset", default["dataset"])

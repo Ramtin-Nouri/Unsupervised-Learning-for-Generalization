@@ -1,13 +1,14 @@
 {
-    "gpus": 1,
+    "gpus": [1],
     "epochs": 50,
     "batch_size": 1,
     "num_workers": 8,
-    "early_stopping_patience": 8,
+    "early_stopping_patience": 15,
     "predict_ahead":1,
 
     "use_joints": false,
     "model":{
-    	"type": "transformer"
+    	"type": "transformer",
+        "lstm_hidden_size": 128
     }
 }

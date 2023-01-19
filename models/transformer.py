@@ -6,6 +6,70 @@ from helper import *
 import numpy as np
 from data_augmentation import DataAugmentation
 
+class ClassificationLstmDecoder(LightningModule):
+    """ Decoder of the LSTM model for classification. 
+    The decoder is a LSTM with a linear layer at the end.
+    Its input is the hidden state of the encoder and the output of the encoder.
+    The output is a sequence of labels.
+    Args:
+        output_size (int): Number of classes to predict.
+        config (dict): Dictionary containing the configuration of the model.
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.hidden_size = config["lstm_hidden_size"]
+        self.num_layers=config["lstm_num_layers"]
+        self.sentence_length = config["sentence_length"]
+        self.label_size = config["dictionary_size"]
+
+        num_convlstm_layers = len(config["convlstm_layers"])
+        input_size =  400 #TODO: get this from the encoder
+
+        self.flatten = nn.Flatten()
+        self.lstm = nn.LSTM(input_size=input_size, hidden_size=self.hidden_size,
+                            num_layers=self.num_layers, batch_first=True)
+        self.linear = nn.Linear(self.hidden_size, config["dictionary_size"])
+
+        self.dropout = None
+        if config["dropout_classifier"] > 0:
+            self.dropout = nn.Dropout(p=config["dropout_classifier"])
+
+    def forward(self, x):
+        """ Forward pass of the decoder.
+        Args:
+            hidden (tuple): Tuple containing the hidden state (hx) and the cell state (cx) of the LSTM.
+                hx (torch.Tensor): Hidden state of the LSTM. Shape: (num_layers, batch_size, hidden_size)
+                cx (torch.Tensor): Cell state of the LSTM. Shape: (num_layers, batch_size, hidden_size)
+            x (torch.Tensor): Output of the encoder. Shape: (batch_size, features, h, w) e.g. (8, 64, 224, 398)
+        Returns:
+            torch.Tensor: Output of the decoder. Shape: (batch_size, sentence_length, label_size) i.e. (batch_size, 3, 19)
+        """
+        hidden = self.init_hidden(x.shape[0], x.device)
+        x = self.flatten(x)
+        if self.dropout is not None:
+            x = self.dropout(x)
+        x = x.unsqueeze(1)
+        pred = torch.zeros((x.shape[0], self.sentence_length, self.label_size), device=x.device) 
+        for i in range(self.sentence_length):
+            lstm_out, hidden = self.lstm(x, hidden)
+            linear_out = self.linear(lstm_out)
+            pred[:, i, :] = linear_out.squeeze(1)
+            
+        return pred
+        
+    def init_hidden(self, batch_size, device):
+        """ Initialize the hidden state of the LSTM.
+        Args:
+            batch_size (int): Batch size.
+            device (torch.device): Device on which the tensors should be created.
+        Returns:
+            tuple: Tuple containing the hidden state (hx) and the cell state (cx) of the LSTM.
+                hx (torch.Tensor): Hidden state of the LSTM. Shape: (num_layers, batch_size, hidden_size)
+                cx (torch.Tensor): Cell state of the LSTM. Shape: (num_layers, batch_size, hidden_size)
+        """
+        return  (torch.zeros((self.num_layers, batch_size, self.hidden_size), device=device),
+                torch.zeros((self.num_layers, batch_size, self.hidden_size), device=device))
+
 class SwinTransformer(LightningModule):
     """ Swin Transformer model for classification.
 
@@ -32,9 +96,7 @@ class SwinTransformer(LightningModule):
         self.conv3d = nn.Conv3d(6,3,2) # RGB+Mask -> 3 channels
         self.transformer = torchvision.models.video.swin3d_b()
         self.hidden_size = self.transformer.head.out_features
-        self.linear1 = nn.Linear(self.hidden_size, config["dictionary_size"])
-        self.linear2 = nn.Linear(self.hidden_size, config["dictionary_size"])
-        self.linear3 = nn.Linear(self.hidden_size, config["dictionary_size"])
+        self.decoder = ClassificationLstmDecoder(config)
 
         self.loss_fn = nn.CrossEntropyLoss()
         self.reset_metrics_train()
@@ -61,16 +123,11 @@ class SwinTransformer(LightningModule):
         x = torch.cat((x_frames, mask_expanded), dim=2)
         x = x.permute(0, 2, 1, 3, 4)
 
-        x = self.conv3d(x) # (batch_size, num_frames, 6, height, width) -> (batch_size, num_frames, 3, height, width)
+        x = self.conv3d(x)      # (batch_size, num_frames, 6, height, width) -> (batch_size, num_frames, 3, height, width)
         x = self.transformer(x) # (batch_size, hidden_size) i.e. (batch_size, 400)
 
-        pred1 = self.linear1(x) # (batch_size, label_size) i.e. (batch_size, 19)
-        pred2 = self.linear2(x) # (batch_size, label_size) i.e. (batch_size, 19)
-        pred3 = self.linear3(x) # (batch_size, label_size) i.e. (batch_size, 19)
-
-        stack = torch.stack([pred1, pred2, pred3], dim=1) # (batch_size, sentence_length, label_size) i.e. (batch_size, 3, 19)
-        return stack
-        
+        decoder_out = self.decoder(x)
+        return decoder_out
 
     def configure_optimizers(self):
         """ Configure the optimizer.
@@ -167,7 +224,7 @@ class SwinTransformer(LightningModule):
         else:
             self.calculate_accuracy(output, labels, train=False, gen=True)
         return loss
-    
+
     def validation_epoch_end(self, outputs):
         """ Same as training epoch end."""
         epoch_action_acc = self.val_action_correct * 100 / self.val_total
@@ -225,14 +282,13 @@ class SwinTransformer(LightningModule):
 
             self.val_total += labels.shape[0]
 
-
     def reset_metrics_train(self):
         """Reset metrics for training"""
         self.training_action_correct = 0
         self.training_color_correct = 0
         self.training_object_correct = 0
         self.training_total = 0
-    
+
     def reset_metrics_val(self):
         """Reset metrics for validation"""
         # normal validation
