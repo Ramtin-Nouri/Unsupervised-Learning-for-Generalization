@@ -275,12 +275,12 @@ def train_supervised(config, wandb_logger, encoder):
         dirpath=config["model_path"],
         save_top_k=1,
         verbose=True,
-        monitor="val_loss_gen/dataloader_idx_1",
+        monitor="val_loss/dataloader_idx_0",
         mode="min",
         filename='supervised_{epoch}-{val_loss:.3f}'
     )
 
-    early_stopping = EarlyStopping(monitor="val_loss_gen/dataloader_idx_1", patience=config["early_stopping_patience"], mode="min")
+    early_stopping = EarlyStopping(monitor="val_loss/dataloader_idx_0", patience=config["early_stopping_patience"], mode="min")
     callbacks = [supervised_checkpt, early_stopping] if not config["debug"] else []
 
     supervised_trainer = pl.Trainer(
@@ -464,10 +464,9 @@ def main(args):
 
     if args.mode == "supervised":
         if args.unsupervised_model is None:
-            print_fail("If mode is supervised, you must provide a path to an unsupervised model.")
-            exit(1)
-            # TODO: allow this with use of not pretrained encoder!
-        unsupervised_model = load_model(args.unsupervised_model, is_unsupervised=True)
+            unsupervised_model = LstmAutoencoder(config)
+        else:
+            unsupervised_model = load_model(args.unsupervised_model, is_unsupervised=True)
     else:
         # First Train Unsupervised model
         unsupervised_model = train_unsupervised(config, wandb_logger)

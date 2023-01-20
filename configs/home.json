@@ -11,7 +11,7 @@
     	"convlstm_layers": [16,32,32,64],
         "convolution_layers_decoder": [64,64,64,64],
         "dropout_classifier":0,
-        "lstm_num_layers": 1,
-        "lstm_hidden_size": 128
+        "lstm_num_layers": 4,
+        "lstm_hidden_size": 512
     }
 }
