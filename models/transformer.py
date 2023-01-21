@@ -94,7 +94,7 @@ class SwinTransformer(LightningModule):
         self.masks = [[0,0,1], [0,1,0], [1,0,0], [0,1,1], [1,0,1], [1,1,0], [1,1,1]]
 
         self.conv3d = nn.Conv3d(6,3,2) # RGB+Mask -> 3 channels
-        self.transformer = torchvision.models.video.swin3d_b()
+        self.transformer = torchvision.models.video.swin3d_b(torchvision.models.video.Swin3D_B_Weights.KINETICS400_IMAGENET22K_V1)
         self.hidden_size = self.transformer.head.out_features
         self.decoder = ClassificationLstmDecoder(config)
 
