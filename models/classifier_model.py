@@ -109,6 +109,7 @@ class LstmClassifier(LightningModule):
             self.augmentation = DataAugmentation()
 
         self.encoder = encoder
+        # TODO: if pretrained, freeze the encoder
         #self.encoder.requires_frad = False # Freeze the encoder 
         self.decoder = ClassificationLstmDecoder(config)
         self.masks = [[0,0,1], [0,1,0], [1,0,0], [0,1,1], [1,0,1], [1,1,0], [1,1,1]]
@@ -163,7 +164,7 @@ class LstmClassifier(LightningModule):
         Returns:
             torch.Tensor: Loss.
         """
-        loss = torch.zeros(1, device=output.device)
+        loss = torch.zeros(output.shape[0], device=output.device)
         for i in range(self.sentence_length):
             loss += self.loss_fn(output[:, i, :], labels[:, i]) * mask[:, i]
         
