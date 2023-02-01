@@ -38,5 +38,9 @@
         "num_joints": 6,
         "sentence_length": 3,
         "dictionary_size": 19
+    },
+    "wandb":{
+        "project":"question",
+        "username":"ramtin-nouri"
     }
 }

@@ -98,14 +98,10 @@ def load_config(config_path, debug=False):
     config["debug"] = debug
     os.makedirs(config["output_dir"], exist_ok=True)
 
-    # Read personal data from different file
-    try:
-        personal_data = json.load(open("configs/personal_data.json"))
-        config["wandb_project"] = personal_data["wandb"]["project"]
-        config["wandb_username"] = personal_data["wandb"]["username"]
-    except:
-        print("Please make sure a JSON file exists called configs/personal_data, \
-        including your WandB project name and user name")
+    # wandb related configs
+    wandb = config_file.get("wandb", default["wandb"])
+    config["wandb_project"] = wandb.get("project", default["wandb"]["project"])
+    config["wandb_username"] = wandb.get("username", default["wandb"]["username"])
 
     # Add git hash to config
     config["git_hash"] = os.popen("git rev-parse HEAD").read().strip()
