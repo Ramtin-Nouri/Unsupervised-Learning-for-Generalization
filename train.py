@@ -56,7 +56,8 @@ def load_config(config_path, debug=False):
         use_joints=config_file.get("use_joints", default["use_joints"]),
         output_dir=config_file.get("output_dir", default["output_dir"]),
         learning_rate=config_file.get("learning_rate", default["learning_rate"]),
-        early_stopping_patience=config_file.get("early_stopping_patience", default["early_stopping_patience"])
+        early_stopping_patience=config_file.get("early_stopping_patience", default["early_stopping_patience"]),
+        data_augmentation=config_file.get("data_augmentation", default["data_augmentation"]),
     )
 
     # model architecture related configs
@@ -67,6 +68,7 @@ def load_config(config_path, debug=False):
     config["lstm_hidden_size"] = model.get("lstm_hidden_size", default["model"]["lstm_hidden_size"])
     config["dropout_autoencoder"] = model.get("dropout_autoencoder", default["model"]["dropout_autoencoder"])
     config["dropout_classifier"] = model.get("dropout_classifier", default["model"]["dropout_classifier"])
+    config["use_resnet"] = model.get("use_resnet", default["model"]["use_resnet"])
 
     # dataset related configs
     dataset = config_file.get("dataset", default["dataset"])
@@ -96,14 +98,10 @@ def load_config(config_path, debug=False):
     config["debug"] = debug
     os.makedirs(config["output_dir"], exist_ok=True)
 
-    # Read personal data from different file
-    try:
-        personal_data = json.load(open("configs/personal_data.json"))
-        config["wandb_project"] = personal_data["wandb"]["project"]
-        config["wandb_username"] = personal_data["wandb"]["username"]
-    except:
-        print("Please make sure a JSON file exists called configs/personal_data, \
-        including your WandB project name and user name")
+    # wandb related configs
+    wandb = config_file.get("wandb", default["wandb"])
+    config["wandb_project"] = wandb.get("project", default["wandb"]["project"])
+    config["wandb_username"] = wandb.get("username", default["wandb"]["username"])
 
     # Add git hash to config
     config["git_hash"] = os.popen("git rev-parse HEAD").read().strip()
@@ -273,12 +271,12 @@ def train_supervised(config, wandb_logger, encoder):
         dirpath=config["model_path"],
         save_top_k=1,
         verbose=True,
-        monitor="val_loss",
+        monitor="val_loss/dataloader_idx_0",
         mode="min",
         filename='supervised_{epoch}-{val_loss:.3f}'
     )
 
-    early_stopping = EarlyStopping(monitor="val_loss", patience=config["early_stopping_patience"], mode="min")
+    early_stopping = EarlyStopping(monitor="val_loss/dataloader_idx_0", patience=config["early_stopping_patience"], mode="min")
     callbacks = [supervised_checkpt, early_stopping] if not config["debug"] else []
 
     supervised_trainer = pl.Trainer(
@@ -317,7 +315,7 @@ def test_supervised(config, wandb_logger, model, datamodule):
         f"Final training")
     val_confusion_matrix_absolute, final_val_wrong_predictions, final_val_sentence_wise_accuracy = get_evaluation(
         model,
-        datamodule.val_dataloader(),
+        datamodule.val_dataloader()[0],
         device,
         f"Final validation")
 
@@ -462,9 +460,9 @@ def main(args):
 
     if args.mode == "supervised":
         if args.unsupervised_model is None:
-            print_fail("If mode is supervised, you must provide a path to an unsupervised model.")
-            exit(1)
-        unsupervised_model = load_model(args.unsupervised_model, is_unsupervised=True)
+            unsupervised_model = LstmAutoencoder(config)
+        else:
+            unsupervised_model = load_model(args.unsupervised_model, is_unsupervised=True)
     else:
         # First Train Unsupervised model
         unsupervised_model = train_unsupervised(config, wandb_logger)

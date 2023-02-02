@@ -12,13 +12,15 @@
     "output_dir": "output",
     "learning_rate": 0.001,
     "early_stopping_patience": 10,
+    "data_augmentation": true,
     "model":{
         "convlstm_layers":[64,64],
-        "convolution_layers_decoder":[256,128,64,16],
+        "convolution_layers_decoder":[64,64,64,64],
+        "dropout_autoencoder":0,
         "lstm_num_layers": 2,
         "lstm_hidden_size": 512,
-        "dropout_autoencoder":0,
-        "dropout_classifier":0.1
+        "dropout_classifier":0.1,
+        "use_resnet": false
     },
     "dataset":{
         "data_path": "dataset/",
@@ -26,7 +28,7 @@
         "height": 224,
         "num_training_samples": 5000,
         "num_validation_samples": 2500,
-        "num_training_samples_unsupervised": 5000,
+        "num_training_samples_unsupervised": 500,
         "num_validation_samples_unsupervised": 200,
         "visible_objects": 1,
         "different_colors": 1,
@@ -36,5 +38,9 @@
         "num_joints": 6,
         "sentence_length": 3,
         "dictionary_size": 19
+    },
+    "wandb":{
+        "project":"question",
+        "username":"ramtin-nouri"
     }
 }
