@@ -151,8 +151,14 @@ class LstmClassifier(LightningModule):
         Returns:
             torch.optim.Optimizer: Optimizer.
         """
+        # lr scheduler
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        return optimizer
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5, verbose=True)
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': scheduler,
+            'monitor': 'val_loss/dataloader_idx_0'
+        }
     
     def loss(self, output, labels, mask):
         """ Calculate the loss.
@@ -164,11 +170,12 @@ class LstmClassifier(LightningModule):
         Returns:
             torch.Tensor: Loss.
         """
-        loss = torch.zeros(output.shape[0], device=output.device)
+        batch_size = output.shape[0]
+        loss = torch.zeros(batch_size, device=output.device)
         for i in range(self.sentence_length):
             loss += self.loss_fn(output[:, i, :], labels[:, i]) * mask[:, i]
         
-        return loss
+        return loss.sum() / batch_size
 
     def training_step(self, batch, batch_idx):
         """ Training step.
