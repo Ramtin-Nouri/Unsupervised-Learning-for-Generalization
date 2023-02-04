@@ -153,7 +153,7 @@ class LstmClassifier(LightningModule):
         """
         # lr scheduler
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5, verbose=True)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=2, verbose=True)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
