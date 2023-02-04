@@ -68,6 +68,7 @@ class CaterDataset(Dataset):
             if not ret:
                 break
             frame = torch.from_numpy(frame).float()/255.0
+            frame = frame.permute(2, 0, 1)
 
             image_sequence.append(frame)
         cap.release()

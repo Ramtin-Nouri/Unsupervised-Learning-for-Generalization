@@ -98,8 +98,19 @@ class ClassificationDenseDecoder(LightningModule):
         self.hidden_size=config["lstm_hidden_size"] #TODO: rename 
         self.label_size = config["dictionary_size"]
 
+        height = config["height"]
+        width = config["width"]
+        self.use_resnet = config["use_resnet"]
+        if self.use_resnet:
+            height = int(round(height/16))
+            width = int(round(width/16))
+
+        num_convlstm_layers = len(config["convlstm_layers"])
+        input_size = (width//2**num_convlstm_layers) * (height//2**num_convlstm_layers) * config["convlstm_layers"][-1]
+
         self.flatten = nn.Flatten()
-        self.linear = nn.Linear(self.hidden_size, config["dictionary_size"])
+        self.linear1 = nn.Linear(input_size, self.hidden_size)
+        self.linear2 = nn.Linear(self.hidden_size, self.label_size)
 
 
     def forward(self, x):
@@ -112,8 +123,19 @@ class ClassificationDenseDecoder(LightningModule):
             torch.Tensor: Output of the decoder. Shape: (batch_size, label_size) i.e. (batch_size, 301)
         """
         x = self.flatten(x)
-        pred = self.linear(x)
-        return pred
+        x = self.linear1(x)
+        x = self.linear2(x)
+        return x
+
+class DenseClassifier(LightningModule):
+    """ Dense model for classification.
+
+    Args:
+        config (dict): Dictionary containing the configuration parameters.
+        encoder (DenseEncoder): Trained encoder part of the DenseAutoencoder model.
+    """
+    def __init__(self, config, encoder):
+        
 
 class LstmClassifier(LightningModule):
     """ LSTM model for classification. 
@@ -140,10 +162,7 @@ class LstmClassifier(LightningModule):
         self.encoder = encoder
         # TODO: if pretrained, freeze the encoder
         #self.encoder.requires_frad = False # Freeze the encoder
-        if config["dataset_name"] == "CATER":
-            self.decoder = ClassificationDenseDecoder(config)
-        else:
-            self.decoder = ClassificationLstmDecoder(config)
+        self.decoder = ClassificationLstmDecoder(config)
         self.masks = [[0,0,1], [0,1,0], [1,0,0], [0,1,1], [1,0,1], [1,1,0], [1,1,1]]
 
         self.loss_fn = nn.CrossEntropyLoss()
@@ -263,6 +282,7 @@ class LstmClassifier(LightningModule):
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         """ Same as training step."""
         frames, joints, labels = batch
+
         mask = torch.ones(frames.size(0), 3, device=frames.device)
 
         if self.use_joints:
