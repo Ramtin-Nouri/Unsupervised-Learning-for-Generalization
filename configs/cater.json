@@ -1,0 +1,28 @@
+{
+    "gpus": 1,
+    "epochs": 50,
+    "batch_size": 1,
+    "num_workers": 8,
+    "early_stopping_patience": 10,
+    "predict_ahead":1,
+
+    "use_joints": false,
+    "model":{
+    	"convlstm_layers": [16,16,16],
+        "convolution_layers_decoder": [64,64,64],
+        "dropout_classifier":0,
+        "lstm_num_layers": 1,
+        "lstm_hidden_size": 512
+    },
+    "dataset":{
+        "name": "CATER",
+        "data_path": "../CATER/no_cam_motion/",
+        "task": "actions_present",
+        "dictionary_size": 14,
+        "width": 320,
+        "height": 240
+    },
+    "wandb":{
+        "project":"CATER"
+    }
+}

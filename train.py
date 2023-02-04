@@ -8,7 +8,8 @@ from torch.utils.data import DataLoader
 from datetime import datetime
 import json
 import os
-import dataset
+import dataset_multimodal
+import dataset_cater
 from models.classifier_model import LstmClassifier
 from models.lstm_autoencoder import LstmAutoencoder
 from helper import *
@@ -87,6 +88,8 @@ def load_config(config_path, debug=False):
     config["num_joints"] = dataset.get("num_joints", default["dataset"]["num_joints"])
     config["sentence_length"] = dataset.get("sentence_length", default["dataset"]["sentence_length"])
     config["dictionary_size"] = dataset.get("dictionary_size", default["dataset"]["dictionary_size"])
+    config["dataset_name"] = dataset.get("name", default["dataset"]["name"]) # options: CATER and MultiModal
+    config["task"] = dataset.get("task", default["dataset"]["task"]) #only relevant for CATER
 
     if debug:
         config["num_training_samples"] = 10
@@ -181,7 +184,8 @@ def train_unsupervised(config, wandb_logger):
     Returns:
         LstmAutoencoder: Trained unsupervised model.
     """
-    unsupervised_datamodule = dataset.DataModule(config, True)
+    assert config["dataset_name"] == "MultiModal", "Unsupervised training is only supported for the MultiModal dataset."
+    unsupervised_datamodule = dataset_multimodal.DataModule(config, True) 
     unsupervised_model = LstmAutoencoder(config)
     print("Unsupervised model:", unsupervised_model)
     wandb_logger.watch(unsupervised_model, log="all")
@@ -262,8 +266,13 @@ def train_supervised(config, wandb_logger, encoder):
         LstmAutoencoder: Trained supervised model.
         datamodule (DataModule): Supervised datamodule.
     """
-    supervised_datamodule = dataset.DataModule(config, False)
+    if config["dataset_name"] == "MultiModal":
+        supervised_datamodule = dataset_multimodal.DataModule(config, False)
+    elif config["dataset_name"] == "CATER":
+        supervised_datamodule = dataset_cater.DataModule(config)
+
     supervised_model = LstmClassifier(config, encoder)
+
     print("Supervised model:", supervised_model)
     wandb_logger.watch(supervised_model, log="all")
 

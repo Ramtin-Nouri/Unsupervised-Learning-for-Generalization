@@ -86,6 +86,35 @@ class ClassificationLstmDecoder(LightningModule):
         return  (torch.zeros((self.num_layers, batch_size, self.hidden_size), device=device),
                 torch.zeros((self.num_layers, batch_size, self.hidden_size), device=device))
 
+class ClassificationDenseDecoder(LightningModule):
+    """Dense Layer Decoder of the model for classification. 
+
+    Args:
+        output_size (int): Number of classes to predict.
+        config (dict): Dictionary containing the configuration of the model.
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.hidden_size=config["lstm_hidden_size"] #TODO: rename 
+        self.label_size = config["dictionary_size"]
+
+        self.flatten = nn.Flatten()
+        self.linear = nn.Linear(self.hidden_size, config["dictionary_size"])
+
+
+    def forward(self, x):
+        """ Forward pass of the decoder.
+
+        Args:
+            x (torch.Tensor): Output of the encoder. Shape: (batch_size, features, h, w) e.g. (8, 64, 224, 398)
+
+        Returns:
+            torch.Tensor: Output of the decoder. Shape: (batch_size, label_size) i.e. (batch_size, 301)
+        """
+        x = self.flatten(x)
+        pred = self.linear(x)
+        return pred
+
 class LstmClassifier(LightningModule):
     """ LSTM model for classification. 
 
@@ -110,8 +139,11 @@ class LstmClassifier(LightningModule):
 
         self.encoder = encoder
         # TODO: if pretrained, freeze the encoder
-        #self.encoder.requires_frad = False # Freeze the encoder 
-        self.decoder = ClassificationLstmDecoder(config)
+        #self.encoder.requires_frad = False # Freeze the encoder
+        if config["dataset_name"] == "CATER":
+            self.decoder = ClassificationDenseDecoder(config)
+        else:
+            self.decoder = ClassificationLstmDecoder(config)
         self.masks = [[0,0,1], [0,1,0], [1,0,0], [0,1,1], [1,0,1], [1,1,0], [1,1,1]]
 
         self.loss_fn = nn.CrossEntropyLoss()
