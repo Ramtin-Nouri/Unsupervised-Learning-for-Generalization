@@ -10,7 +10,7 @@ import json
 import os
 import dataset_multimodal
 import dataset_cater
-from models.classifier_model import LstmClassifier
+from models.classifier_model import LstmClassifier, DenseClassifier
 from models.lstm_autoencoder import LstmAutoencoder
 from helper import *
 from evaluation import *
@@ -184,7 +184,7 @@ def train_unsupervised(config, wandb_logger):
     Returns:
         LstmAutoencoder: Trained unsupervised model.
     """
-    assert config["dataset_name"] == "MultiModal", "Unsupervised training is only supported for the MultiModal dataset."
+    assert config["dataset_name"] == "MultiModal", "Unsupervised training is only supported for the MultiModal dataset. (for now)" #TODO: support CATER
     unsupervised_datamodule = dataset_multimodal.DataModule(config, True) 
     unsupervised_model = LstmAutoencoder(config)
     print("Unsupervised model:", unsupervised_model)
@@ -268,10 +268,11 @@ def train_supervised(config, wandb_logger, encoder):
     """
     if config["dataset_name"] == "MultiModal":
         supervised_datamodule = dataset_multimodal.DataModule(config, False)
+        supervised_model = LstmClassifier(config, encoder)
     elif config["dataset_name"] == "CATER":
         supervised_datamodule = dataset_cater.DataModule(config)
+        supervised_model = DenseClassifier(config, encoder)
 
-    supervised_model = LstmClassifier(config, encoder)
 
     print("Supervised model:", supervised_model)
     wandb_logger.watch(supervised_model, log="all")

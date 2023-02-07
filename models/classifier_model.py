@@ -135,7 +135,79 @@ class DenseClassifier(LightningModule):
         encoder (DenseEncoder): Trained encoder part of the DenseAutoencoder model.
     """
     def __init__(self, config, encoder):
-        
+        super().__init__()
+        self.save_hyperparameters()
+
+        self.encoder = encoder
+        self.decoder = ClassificationDenseDecoder(config)
+
+        # TODO: add masks
+        # TODO: add augmentation
+        self.learning_rate = config["learning_rate"]
+        self.loss_fn = nn.CrossEntropyLoss()
+
+    def forward(self, x):
+        """ Forward pass of the model.
+
+        Args:
+            x (torch.Tensor): Input image. Shape: (batch_size, channels, height, width) e.g. (8, 3, 224, 398)
+
+        Returns:
+            torch.Tensor: Output of the model. Shape: (batch_size, label_size) i.e. (batch_size, 301)
+        """
+        mask = torch.ones(x.size(0), 3, device=x.device) #TODO: add masks
+        h_t, c_t = self.encoder.init_hidden(x.size()[0])
+
+        # autoencoder forward
+        encoder_out = self.encoder(x, mask, h_t, c_t)
+
+        encoder_out = encoder_out[-1] # take last output of encoder
+        # decode
+        decoder_out = self.decoder(x=encoder_out)
+        return decoder_out
+
+    def training_step(self, batch, batch_idx):
+        """ Training step of the model.
+
+        Args:
+            batch (tuple): Tuple containing the input and the target.
+            batch_idx (int): Index of the batch.
+
+        Returns:
+            dict: Dictionary containing the loss.
+        """
+        x, y = batch
+        y_hat = self(x)
+        loss = self.loss_fn(y_hat, y)
+        self.log("train_loss", loss)
+        return {"loss": loss}
+
+    def validation_step(self, batch, batch_idx):
+        """ Validation step of the model.
+
+        Args:
+            batch (tuple): Tuple containing the input and the target.
+            batch_idx (int): Index of the batch.
+
+        Returns:
+            dict: Dictionary containing the loss.
+        """
+        x, y = batch
+        y_hat = self(x)
+        print(y.shape, y_hat.shape)
+        loss = self.loss_fn(y_hat, y)
+        self.log("val_loss", loss)
+        return {"loss": loss}
+
+    def configure_optimizers(self):
+        """ Configures the optimizer.
+
+        Returns:
+            torch.optim.Adam: Adam optimizer.
+        """
+        # TODO: add learning rate scheduler
+        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+
 
 class LstmClassifier(LightningModule):
     """ LSTM model for classification. 
