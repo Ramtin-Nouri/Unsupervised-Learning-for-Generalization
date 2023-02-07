@@ -2,7 +2,7 @@
     "gpus": 1,
     "epochs": 50,
     "batch_size": 1,
-    "num_workers": 8,
+    "num_workers": 2,
     "early_stopping_patience": 10,
     "predict_ahead":1,
 

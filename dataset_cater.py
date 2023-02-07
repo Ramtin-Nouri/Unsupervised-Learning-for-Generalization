@@ -15,9 +15,11 @@ class CaterDataset(Dataset):
         data_path (str): Path to the data directory.
         split (str): Which split to use. One of 'train', 'val'.
         task (str): Which task to use. One of 'actions_present' , 'actions_order_uniq'.
+        dictionary_size (int): Size of the dictionary to use.
         transform (callable): Transformation to apply to each image.
+        debug (bool): Whether to use a small subset of the data for debugging.
     """
-    def __init__(self, data_path, split, task, transform=None,debug=False):
+    def __init__(self, data_path, split, task, dictionary_size, transform=None,debug=False):
         self.data_path = data_path
         self.split = split
         assert self.split in ['train', 'val']
@@ -25,6 +27,7 @@ class CaterDataset(Dataset):
         self.task = task
         assert self.task in ['actions_present', 'actions_order_uniq']
 
+        self.dictionary_size = dictionary_size
         self.transform = transform
         self.debug = debug
         self.data_files = self._load_data()
@@ -52,7 +55,9 @@ class CaterDataset(Dataset):
             data_file = os.path.join(self.data_path, "videos", data_file)
             label = label.split(',')
             label = [int(l) for l in label]
-            data_files.append((data_file, label))
+            label_tensor = torch.zeros(self.dictionary_size)
+            label_tensor[label] = 1 # one-hot encoding
+            data_files.append((data_file, label_tensor))
 
         data_files.sort()
         return data_files
@@ -84,14 +89,15 @@ class DataModule(LightningDataModule):
         self.batch_size = config["batch_size"]
         self.num_workers = config["num_workers"]
         self.task = config["task"]
+        self.dictionary_size = config["dictionary_size"]
         self.debug = config["debug"]
         
         self.transform = None
         # TODO: add transform Normalize
 
     def setup(self, stage=None):
-        self.train_dataset = CaterDataset(self.data_path, 'train', self.task, self.transform, debug=self.debug)
-        self.val_dataset = CaterDataset(self.data_path, 'val', self.task, self.transform, debug=self.debug)
+        self.train_dataset = CaterDataset(self.data_path, 'train', self.task, self.dictionary_size,self.transform, debug=self.debug)
+        self.val_dataset = CaterDataset(self.data_path, 'val', self.task, self.dictionary_size, self.transform, debug=self.debug)
         if not self.debug:
             assert len(self.train_dataset) + len(self.val_dataset) == 5500
 
