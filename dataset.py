@@ -112,11 +112,12 @@ class MultimodalSimulation(Dataset):
         frame_paths.sort()
 
 
-        # Fix dataset issues
-        # 1. Some sequences are reset after a certain number of frames. 
-        # The frames before the reset need to be excluded.
-        # 2. Some sequences have unrelated "stray" frames after the correct sequence.
-        # The action.info files contain the correct number of frames and the resets.
+        """Fix dataset issues.
+        1. Some sequences are reset after a certain number of frames. 
+        The frames before the reset need to be excluded.
+        2. Some sequences have unrelated "stray" frames after the correct sequence.
+        The action.info files contain the correct number of frames and the resets.
+        """
         with open(f"{sequence_path}/action.info", "r") as f:
             action_info = f.read().splitlines()
             correct_number_frames =int(action_info[0].split("[")[1].split(",")[0])
@@ -133,11 +134,17 @@ class MultimodalSimulation(Dataset):
         num_frames = len(frame_paths)
         assert num_frames > 0
 
-        # Pad all sequences to the same length
-        # If sequence is longer take the last input_length sequences
-        # If sequence is shorter repeat the first frame input_length-num_frames times
+        """Pad all sequences to the same length.
+        If sequence is longer take the last input_length sequences
+
+        I.e. if input_length=16 and num_frames=20, the last 16 frames are taken
+        If sequence is shorter repeat the first frame input_length-num_frames times
+
+        I.e. if input_length=16 and num_frames=10, the first frame is repeated 6 times
+        If stride is given, the input sequences are subsampled
+        """
         joints = torch.zeros(self.input_length, self.JOINTS, dtype=torch.float32) # 6 joints
-        frames = torch.zeros(self.input_length, self.CHANNELS, self.HEIGHT, self.WIDTH, dtype=torch.float32)  # img shape (3, 224, 398)
+        frames = torch.zeros(self.input_length, self.CHANNELS, self.HEIGHT, self.WIDTH, dtype=torch.float32)  # i.e. shape (16, 3, 224, 398)
 
         input_index = self.input_length -1
         for n in range(num_frames-1, -1, -self.frame_stride):
@@ -151,7 +158,8 @@ class MultimodalSimulation(Dataset):
             input_index -= 1
             # if input is filled, return
             if input_index < 0:
-                self.assert_output(frames, joints, label)
+                if self.debug:
+                    self.assert_output(frames, joints, label)
                 return frames, joints, label
 
         # if sequence is shorter than input_length, repeat first frame
