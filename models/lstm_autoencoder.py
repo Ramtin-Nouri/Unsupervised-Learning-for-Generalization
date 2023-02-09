@@ -41,6 +41,7 @@ class LstmEncoder(LightningModule):
         else:
             in_chan = 3
         in_chan += mask_channels
+        self.use_batch_norm = False # Not configurable rn, because it performs really bad
 
 
         convlstm_1 = ConvLSTMCell(input_dim=in_chan,
@@ -50,13 +51,20 @@ class LstmEncoder(LightningModule):
 
         self.convLSTMs = []
         self.convLSTMs.append(convlstm_1)
+        if self.use_batch_norm:
+            self.batch_norms = []
+            self.batch_norms.append(nn.BatchNorm2d(convlstm_layers[0]))
         for i in range(1, len(convlstm_layers)):
             convlstm = ConvLSTMCell(input_dim=convlstm_layers[i-1],
                                                hidden_dim=convlstm_layers[i],
                                                kernel_size=(3, 3),
                                                bias=True)
             self.convLSTMs.append(convlstm)
+            if self.use_batch_norm:
+                self.batch_norms.append(nn.BatchNorm2d(convlstm_layers[i]))
         self.convLSTMs = nn.ModuleList(self.convLSTMs)
+        if self.use_batch_norm:
+            self.batch_norms = nn.ModuleList(self.batch_norms)
 
 
         self.maxpool = nn.MaxPool3d(kernel_size=(1, 2, 2))
@@ -78,6 +86,8 @@ class LstmEncoder(LightningModule):
             for i in range(len(self.convLSTMs)):
                 h_t[i], c_t[i] = self.convLSTMs[i](x_t, (h_t[i], c_t[i]))
                 x_t = self.maxpool(h_t[i])
+                if self.use_batch_norm:
+                    x_t = self.batch_norms[i](x_t)
             outputs.append(x_t)
 
         return outputs
