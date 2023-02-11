@@ -136,11 +136,11 @@ class MultimodalSimulation(Dataset):
 
         """Pad all sequences to the same length.
         If sequence is longer take the last input_length sequences
-
         I.e. if input_length=16 and num_frames=20, the last 16 frames are taken
-        If sequence is shorter repeat the first frame input_length-num_frames times
 
+        If sequence is shorter repeat the first frame input_length-num_frames times
         I.e. if input_length=16 and num_frames=10, the first frame is repeated 6 times
+
         If stride is given, the input sequences are subsampled
         """
         joints = torch.zeros(self.input_length, self.JOINTS, dtype=torch.float32) # 6 joints
@@ -148,13 +148,8 @@ class MultimodalSimulation(Dataset):
 
         input_index = self.input_length -1
         for n in range(num_frames-1, -1, -self.frame_stride):
-            joint_path = joint_paths[n]
-            frame_path = frame_paths[n]
-
-            joints[input_index] = torch.from_numpy(np.load(joint_path)).to(torch.float32)
-            frames[input_index] = read_image(frame_path).to(torch.float32) / 255
-            if self.transform is not None:
-                frames[input_index] = self.transform(frames[input_index])
+            frames[input_index], joints[input_index] = self.get_image(frame_paths, joint_paths, n)
+            
             input_index -= 1
             # if input is filled, return
             if input_index < 0:
@@ -163,10 +158,7 @@ class MultimodalSimulation(Dataset):
                 return frames, joints, label
 
         # if sequence is shorter than input_length, repeat first frame
-        frame0 = read_image(frame_paths[0]).to(torch.float32) / 255
-        if self.transform is not None:
-            frame0 = self.transform(frame0)
-        joint0 = torch.from_numpy(np.load(joint_paths[0])).to(torch.float32)
+        frame0, joint0 = self.get_image(frame_paths, joint_paths, 0)
         for i in range(input_index, -1, -1):
             frames[i] = frame0
             joints[i] = joint0
@@ -174,6 +166,16 @@ class MultimodalSimulation(Dataset):
         if self.debug:
             self.assert_output(frames, joints, label)
         return frames, joints, label
+
+    def get_image(self, frame_paths, joint_paths, index):
+        frame_path = frame_paths[index]
+        frame = read_image(frame_path).to(torch.float32) / 255
+        if self.transform is not None:
+            frame = self.transform(frame)
+
+        joint_path = joint_paths[index]
+        joint = torch.from_numpy(np.load(joint_path)).to(torch.float32)
+        return frame, joint
 
 
     def get_sentence_string(self, label):
