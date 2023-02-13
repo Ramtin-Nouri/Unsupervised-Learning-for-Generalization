@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import torchmetrics
 from einops import rearrange
 from collections import OrderedDict
 from models.lstm_autoencoder import LstmEncoder
@@ -145,6 +146,8 @@ class DenseClassifier(LightningModule):
         # TODO: add augmentation
         self.learning_rate = config["learning_rate"]
         self.loss_fn = nn.CrossEntropyLoss()
+        self.train_mAP = torchmetrics.AveragePrecision(task="binary", num_classes=config["dictionary_size"], average="macro")
+        self.val_mAP = torchmetrics.AveragePrecision(task="binary", num_classes=config["dictionary_size"], average="macro")
 
     def forward(self, x):
         """ Forward pass of the model.
@@ -178,8 +181,13 @@ class DenseClassifier(LightningModule):
         """
         x, y = batch
         y_hat = self(x)
+
         loss = self.loss_fn(y_hat, y)
         self.log("train_loss", loss)
+
+        self.train_mAP(y_hat, y)
+        self.log("train_mAP", self.train_mAP, on_step=False, on_epoch=True)
+
         return {"loss": loss}
 
     def validation_step(self, batch, batch_idx):
@@ -194,9 +202,13 @@ class DenseClassifier(LightningModule):
         """
         x, y = batch
         y_hat = self(x)
-        print(y.shape, y_hat.shape)
+
         loss = self.loss_fn(y_hat, y)
         self.log("val_loss", loss)
+
+        self.val_mAP(y_hat, y)
+        self.log("val_mAP", self.val_mAP, on_step=False, on_epoch=True)
+
         return {"loss": loss}
 
     def configure_optimizers(self):

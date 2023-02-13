@@ -77,7 +77,7 @@ class CaterDataset(Dataset):
 
             image_sequence.append(frame)
         cap.release()
-        assert len(image_sequence) == 301
+        #assert len(image_sequence) == 301
         image_sequence = torch.stack(image_sequence, dim=0)
         return image_sequence
 

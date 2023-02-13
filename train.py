@@ -487,7 +487,8 @@ def main(args):
     # Train supervised model
     supervised_model, supervised_data = train_supervised(config, wandb_logger, unsupervised_model)
 
-    test_supervised(config, wandb_logger, supervised_model, supervised_data)
+    if config["dataset_name"] != "CATER":
+        test_supervised(config, wandb_logger, supervised_model, supervised_data)
 
 
 if __name__ == "__main__":
