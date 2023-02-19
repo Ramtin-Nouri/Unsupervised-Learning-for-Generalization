@@ -156,7 +156,7 @@ class LstmClassifier(LightningModule):
         mask = self.masks[np.random.randint(len(self.masks))]
         if self.multi_sentence:
             # repeat mask for each sentence
-            mask = mask * (multi_sentence_length//self.sentence_length)
+            mask = mask.repeat((multi_sentence_length//self.sentence_length))
             # add 1 to the end of the mask to indicate the end of the sentence (EOS token)
             mask = torch.cat((mask, torch.ones(1)), dim=0)
         mask = mask.repeat(batch_size, 1)
@@ -212,10 +212,6 @@ class LstmClassifier(LightningModule):
         """
         batch_size = output.shape[0]
         loss = torch.zeros(batch_size, device=output.device)
-        print(labels.shape, output.shape, mask.shape)
-        assert labels.shape == mask.shape
-        assert output.shape[1] == labels.shape[1]
-        print(labels)
         for i in range(labels.shape[1]):
             loss += self.loss_fn(output[:, i, :], labels[:, i]) * mask[:, i]
         
