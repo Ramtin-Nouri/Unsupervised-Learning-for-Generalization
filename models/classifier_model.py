@@ -1,3 +1,4 @@
+import itertools
 import torch
 from torch import nn
 from einops import rearrange
@@ -115,11 +116,34 @@ class LstmClassifier(LightningModule):
             self.encoder.freeze()
             self.encoder.requires_grad = False # Freeze the encoder 
         self.decoder = ClassificationLstmDecoder(config)
-        self.masks = [[0,0,1], [0,1,0], [1,0,0], [0,1,1], [1,0,1], [1,1,0], [1,1,1]]
+        self.create_masks()
 
         self.loss_fn = nn.CrossEntropyLoss()
         self.reset_metrics_train()
         self.reset_metrics_val()
+
+    def create_masks(self):
+        """ Create all possible masks for the frames.
+        Length of each mask is sentence_length (3) and each position can be either 0 or 1.
+        [0,0,0] is excluded because it means that no label is used.
+        """
+        self.masks = []
+        for i in range(1, 2**self.sentence_length):
+            # convert to binary
+            mask = [int(x) for x in list('{0:0b}'.format(i))]
+            # pad with zeros
+            mask = [0] * (self.sentence_length - len(mask)) + mask
+            self.masks.append(mask)
+        self.masks = torch.tensor(self.masks, device=self.device)
+
+    def get_random_mask(self, batch_size):
+        """ Get a random mask from the list of all possible masks.
+        
+        Each mask is the same for all inputs in a batch.
+        """
+        mask = self.masks[np.random.randint(len(self.masks))].repeat(batch_size, 1)
+        mask = mask.to(self.device) # don't know why this is necessary, but it is
+        return mask
         
     def forward(self, x_frames, mask, x_joints=None):
         """ Forward pass of the model.
@@ -191,8 +215,7 @@ class LstmClassifier(LightningModule):
         frames, joints, labels = batch
         
         # random mask for each input
-        mask = [self.masks[np.random.choice(len(self.masks))]] * frames.size(0) #each batch has the same mask
-        mask = torch.tensor(mask, device=frames.device)
+        mask = self.get_random_mask(frames.size(0))
 
         if self.use_augmentation:
             augment_action = not mask[0][0]
