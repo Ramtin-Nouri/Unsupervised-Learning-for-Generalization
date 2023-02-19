@@ -7,6 +7,7 @@ from pytorch_lightning import LightningDataModule
 class ArcGenDataset(Dataset):
     def __init__(self, config, mode='train'):
         self.config = config
+        self.stride = config['input_stride']
         self.mode = mode
         self.data_path = config['data_path']
 
@@ -64,12 +65,17 @@ class ArcGenDataset(Dataset):
         cap = cv2.VideoCapture(video_path)
         assert cap.isOpened(), f'Cannot capture source {video_path}'
         frames = []
+        i = 0
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
+            if i % self.stride != 0:
+                i += 1
+                continue
             frame = torch.tensor(frame)
             frames.append(frame)
+            i += 1
         cap.release()
 
         #print(len(frames))
@@ -96,7 +102,8 @@ class DataModule(LightningDataModule):
         return DataLoader(self.train_dataset, batch_size=self.config['batch_size'], shuffle=True, num_workers=self.config["num_workers"])
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.config['batch_size'], shuffle=False, num_workers=self.config["num_workers"])
+        val_loader = DataLoader(self.val_dataset, batch_size=self.config['batch_size'], shuffle=False, num_workers=self.config["num_workers"])
+        return [val_loader, val_loader] #TODO: use small subset of comp-gen test for validation
 
     def test_dataloader(self):
         return DataLoader(self.test_dataset, batch_size=self.config['batch_size'], shuffle=False, num_workers=self.config["num_workers"])
