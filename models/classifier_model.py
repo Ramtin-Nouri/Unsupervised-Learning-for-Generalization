@@ -93,7 +93,7 @@ class LstmClassifier(LightningModule):
         config (dict): Dictionary containing the configuration parameters.
         encoder (LstmEncoder): Trained encoder part of the LstmAutoencoder model.
     """
-    def __init__(self, config, encoder):
+    def __init__(self, config, encoder=None):
         super().__init__()
         self.save_hyperparameters()
 
@@ -108,9 +108,12 @@ class LstmClassifier(LightningModule):
         if self.use_augmentation:
             self.augmentation = DataAugmentation()
 
-        self.encoder = encoder
-        # TODO: if pretrained, freeze the encoder
-        #self.encoder.requires_frad = False # Freeze the encoder 
+        if encoder is None:
+            self.encoder = LstmEncoder(config)
+        else:
+            self.encoder = encoder
+            self.encoder.freeze()
+            self.encoder.requires_grad = False # Freeze the encoder 
         self.decoder = ClassificationLstmDecoder(config)
         self.masks = [[0,0,1], [0,1,0], [1,0,0], [0,1,1], [1,0,1], [1,1,0], [1,1,1]]
 

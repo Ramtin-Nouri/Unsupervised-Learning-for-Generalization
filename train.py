@@ -250,7 +250,7 @@ def load_model(model_path, is_unsupervised, encoder=None):
     model.load_state_dict(model_ckpt["state_dict"])
     return model
 
-def train_supervised(config, wandb_logger, encoder):
+def train_supervised(config, wandb_logger, encoder=None):
     """Train the supervised model.
 
     Args:
@@ -460,22 +460,20 @@ def main(args):
 
     if args.mode == "supervised":
         if args.unsupervised_model is None:
-            unsupervised_model = LstmAutoencoder(config)
+            supervised_model, supervised_data = train_supervised(config, wandb_logger)
+
         else:
             unsupervised_model = load_model(args.unsupervised_model, is_unsupervised=True)
+            supervised_model, supervised_data = train_supervised(config, wandb_logger, unsupervised_model.encoder)
+
     else:
         # First Train Unsupervised model
         unsupervised_model = train_unsupervised(config, wandb_logger)
-
-    if args.mode == "unsupervised":
-        print_with_time("Unsupervised training finished.")
-        return
-
-    # Use the trained model to get the latent space, dismiss its decoder
-    unsupervised_model = unsupervised_model.encoder
-
-    # Train supervised model
-    supervised_model, supervised_data = train_supervised(config, wandb_logger, unsupervised_model)
+        if args.mode == "unsupervised":
+            # Stop here if only unsupervised training is required
+            print_with_time("Unsupervised training finished.")
+            return
+        supervised_model, supervised_data = train_supervised(config, wandb_logger, unsupervised_model.encoder)
 
     test_supervised(config, wandb_logger, supervised_model, supervised_data)
 
