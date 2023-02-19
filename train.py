@@ -321,14 +321,16 @@ def test_supervised(config, wandb_logger, model, datamodule):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # TODO: avoid passing device, use pytorch lightning
     model.to(device)
 
-    train_confusion_matrix_absolute, final_train_wrong_predictions, final_train_sentence_wise_accuracy = get_evaluation(
+    train_confusion_matrix_absolute, final_train_sentence_wise_accuracy = get_evaluation(
         model, datamodule.train_dataloader(),
         device,
+        config,
         f"Final training")
-    val_confusion_matrix_absolute, final_val_wrong_predictions, final_val_sentence_wise_accuracy = get_evaluation(
+    val_confusion_matrix_absolute, final_val_sentence_wise_accuracy = get_evaluation(
         model,
         datamodule.val_dataloader()[0],
         device,
+        config,
         f"Final validation")
 
     train_confusion_matrix_relative = get_relative_confusion_matrix(train_confusion_matrix_absolute)
@@ -381,10 +383,7 @@ def test_supervised(config, wandb_logger, model, datamodule):
                 f"Final_validation_accuracy": final_val_accuracy,
                 f"Final_validation_action_accuracy": final_val_action_accuracy,
                 f"Final_validation_color_accuracy": final_val_color_accuracy,
-                f"Final_validation_object_accuracy": final_val_object_accuracy,
-
-                f"Final_training_wrong_predictions": final_train_wrong_predictions,
-                f"Final_validation_wrong_predictions": final_val_wrong_predictions})
+                f"Final_validation_object_accuracy": final_val_object_accuracy})
 
     cf_matrices_absolute = np.zeros((6, 19, 19))
     cf_matrices_absolute_gen = np.zeros((6, 19, 19))
@@ -399,8 +398,8 @@ def test_supervised(config, wandb_logger, model, datamodule):
     gen_test_loader = DataLoader(dataset=gen_test_data, batch_size=config["batch_size"], shuffle=False,
                                     num_workers=config["num_workers"])
 
-    confusion_matrix_absolute, wrong_predictions, sentence_wise_accuracy = get_evaluation(model, test_loader, device, f"V{i} test")
-    confusion_matrix_absolute_gen, wrong_predictions_gen, sentence_wise_accuracy_gen = get_evaluation(model, gen_test_loader, device, f"V{i} generalization test")
+    confusion_matrix_absolute,  sentence_wise_accuracy = get_evaluation(model, test_loader, device, config, f"V{i} test")
+    confusion_matrix_absolute_gen,  sentence_wise_accuracy_gen = get_evaluation(model, gen_test_loader, device, config, f"V{i} generalization test")
 
     confusion_matrix_relative = get_relative_confusion_matrix(confusion_matrix_absolute)
     confusion_matrix_relative_gen = get_relative_confusion_matrix(confusion_matrix_absolute_gen)
@@ -458,9 +457,7 @@ def test_supervised(config, wandb_logger, model, datamodule):
                 f"V{i}-generalization_test_accuracy": gen_test_accuracy,
                 f"V{i}-generalization_test_action_accuracy": gen_test_action_accuracy,
                 f"V{i}-generalization_test_color_accuracy": gen_test_color_accuracy,
-                f"V{i}-generalization_test_object_accuracy": gen_test_object_accuracy,
-                f"V{i}-test_wrong_predictions": wrong_predictions,
-                f"V{i}-generalization_test_wrong_predictions": wrong_predictions_gen})
+                f"V{i}-generalization_test_object_accuracy": gen_test_object_accuracy})
     print_with_time(f"Test accuracy: {np.mean(sentence_wise_accuracy):8.4f}%")
     print_with_time(f"Generalization test accuracy: {np.mean(sentence_wise_accuracy_gen):8.4f}%")
 

@@ -63,7 +63,7 @@ def create_confusion_matrix_plt(plot_matrix, title, floating):
     return plt
 
 
-def get_evaluation(model, data_loader, device, description=""):
+def get_evaluation(model, data_loader, device, config, description=""):
     """ Evaluates the model on the given data loader.
 
     Args:
@@ -76,50 +76,68 @@ def get_evaluation(model, data_loader, device, description=""):
         float: The accuracy.
         np.array: The confusion matrix.
     """
-    dictionary = ["put down", "picked up", "pushed left", "pushed right",
-                  "apple", "banana", "cup", "football", "book", "pylon", "bottle", "star", "ring",
-                  "red", "green", "blue", "yellow", "white", "brown"]
-    confusion_matrix = np.zeros((len(dictionary), len(dictionary)))
+    dictionary_size = config["dictionary_size"]
+    sentence_length = config["sentence_length"]
+
+    confusion_matrix = np.zeros((dictionary_size, dictionary_size))
     model.eval()
 
-    wrong_predictions = []
-
     with torch.no_grad():
-        outputs = torch.zeros((len(data_loader.dataset)), 3, 19)
-        labels = torch.zeros((len(data_loader.dataset), 3))
+        outputs = []
+        labels = []
         correct_sentences = 0
-        i = 0
-        for (frames_batch, joints_batch, label_batch) in tqdm(data_loader, desc=description):
+        for batch in tqdm(data_loader, desc=description):
+            if len(batch) == 2:
+                frames_batch, label_batch = batch 
+            else:
+                frames_batch, joints_batch, label_batch = batch
             frames_batch = frames_batch.to(device=device)  # (N, L, c, w, h)
-            mask = torch.ones(frames_batch.size(0), 3, device=frames_batch.device)
+            mask = torch.ones(frames_batch.size(0), label_batch.size(1), device=frames_batch.device)
 
             output_batch = model(frames_batch, mask)#, joints_batch)
+            outputs.append(output_batch)
+            labels.append(label_batch)
 
-            outputs[i:i + data_loader.batch_size] = output_batch.to(torch.device("cpu"))
-            labels[i:i + data_loader.batch_size] = label_batch
-            i += data_loader.batch_size
+        outputs = torch.cat(outputs, dim=1)
+        labels = torch.cat(labels, dim=1)
 
-        _, action_outputs = torch.max(outputs[:, 0, :], dim=1)
-        _, color_outputs = torch.max(outputs[:, 1, :], dim=1)
-        _, object_outputs = torch.max(outputs[:, 2, :], dim=1)
+        if config["multi_sentence"]:
+            for i in range(outputs.shape[1]//4):
+                _, action_outputs = torch.max(outputs[:, i*4, :], dim=1)
+                _, color_outputs = torch.max(outputs[:, i*4+1, :], dim=1)
+                _, material_outputs = torch.max(outputs[:, i*4+2, :], dim=1)
+                _, object_outputs = torch.max(outputs[:, i*4+3, :], dim=1)
 
-        for n in range(outputs.shape[0]):
-            confusion_matrix[int(labels[n, 0].item()), (action_outputs[n].item())] += 1
-            confusion_matrix[int(labels[n, 1].item()), (color_outputs[n].item())] += 1
-            confusion_matrix[int(labels[n, 2].item()), (object_outputs[n].item())] += 1
+                for n in range(outputs.shape[0]):
+                    confusion_matrix[int(labels[n, 0].item()), (action_outputs[n].item())] += 1
+                    confusion_matrix[int(labels[n, 1].item()), (color_outputs[n].item())] += 1
+                    confusion_matrix[int(labels[n, 2].item()), (material_outputs[n].item())] += 1
+                    confusion_matrix[int(labels[n, 3].item()), (object_outputs[n].item())] += 1
 
-            action_correct = torch.sum(action_outputs[n] == labels[n, 0])
-            color_correct = torch.sum(color_outputs[n] == labels[n, 1])
-            object_correct = torch.sum(object_outputs[n] == labels[n, 2])
+                    action_correct = torch.sum(action_outputs[n] == labels[n, 0])
+                    color_correct = torch.sum(color_outputs[n] == labels[n, 1])
+                    material_correct = torch.sum(material_outputs[n] == labels[n, 2])
+                    object_correct = torch.sum(object_outputs[n] == labels[n, 2])
 
-            if action_correct and color_correct and object_correct:
-                correct_sentences += 1
+                    if action_correct and color_correct and object_correct and material_correct:
+                        correct_sentences += 1
+        else:
+            _, action_outputs = torch.max(outputs[:, 0, :], dim=1)
+            _, color_outputs = torch.max(outputs[:, 1, :], dim=1)
+            _, object_outputs = torch.max(outputs[:, 2, :], dim=1)
 
-            if (not action_correct) or (not color_correct) or (not object_correct):
-                wrong_predictions.append(f"{description} sequence_{n:04d}, "
-                                         f"predicted: {dictionary[action_outputs[n].item()]} {dictionary[color_outputs[n].item()]} {dictionary[object_outputs[n].item()]}, "
-                                         f"actual:    {dictionary[int(labels[n, 0].item())]} {dictionary[int(labels[n, 1].item())]} {dictionary[int(labels[n, 2].item())]}")
+            for n in range(outputs.shape[0]):
+                confusion_matrix[int(labels[n, 0].item()), (action_outputs[n].item())] += 1
+                confusion_matrix[int(labels[n, 1].item()), (color_outputs[n].item())] += 1
+                confusion_matrix[int(labels[n, 2].item()), (object_outputs[n].item())] += 1
+
+                action_correct = torch.sum(action_outputs[n] == labels[n, 0])
+                color_correct = torch.sum(color_outputs[n] == labels[n, 1])
+                object_correct = torch.sum(object_outputs[n] == labels[n, 2])
+
+                if action_correct and color_correct and object_correct:
+                    correct_sentences += 1
 
     sentence_wise_accuracy = correct_sentences * 100 / len(data_loader.dataset)
 
-    return confusion_matrix, wrong_predictions, sentence_wise_accuracy
+    return confusion_matrix, sentence_wise_accuracy
