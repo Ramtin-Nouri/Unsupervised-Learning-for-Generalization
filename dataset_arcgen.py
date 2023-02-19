@@ -49,32 +49,36 @@ class ArcGenDataset(Dataset):
         else:
             data_point = self.test_data[idx]
 
-        video_path = data_point.split(';')[0]
+        video_path = data_point.split(':')[0]
         video_path = os.path.join(self.data_path, 'images', video_path)
 
         frames = self.load_video(video_path)
 
         label = data_point.split(':')[1].split(',')
         label = [int(x) for x in label]
-        label = torch.tensor(label)
+        label = torch.tensor(label, dtype=torch.uint8)
 
-        return frames
+        return frames, label
 
     def load_video(self, video_path):
         cap = cv2.VideoCapture(video_path)
+        assert cap.isOpened(), f'Cannot capture source {video_path}'
         frames = []
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
+            frame = torch.tensor(frame)
             frames.append(frame)
         cap.release()
 
         #print(len(frames))
         # TODO: cap to fix length + pad preceding zeros
 
-        frames = torch.tensor(frames)
-
+        frames = torch.stack(frames)
+        frames = frames.permute(0, 3, 1, 2)
+        frames = frames.float() / 255.0
+        frames = frames - 0.5 # TODO: do proper normalization
         return frames
 
 class DataModule(LightningDataModule):
@@ -89,10 +93,10 @@ class DataModule(LightningDataModule):
         self.test_dataset = ArcGenDataset(self.config, mode='test')
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.config['batch_size'], shuffle=True, num_workers=4)
+        return DataLoader(self.train_dataset, batch_size=self.config['batch_size'], shuffle=True, num_workers=self.config["num_workers"])
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.config['batch_size'], shuffle=False, num_workers=4)
+        return DataLoader(self.val_dataset, batch_size=self.config['batch_size'], shuffle=False, num_workers=self.config["num_workers"])
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.config['batch_size'], shuffle=False, num_workers=4)
+        return DataLoader(self.test_dataset, batch_size=self.config['batch_size'], shuffle=False, num_workers=self.config["num_workers"])
