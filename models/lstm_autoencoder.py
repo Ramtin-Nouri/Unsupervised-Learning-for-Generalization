@@ -69,9 +69,10 @@ class LstmEncoder(LightningModule):
 
         self.maxpool = nn.MaxPool3d(kernel_size=(1, 2, 2))
 
-    def forward(self, x, mask, h_t, c_t):
+    def forward(self, x, mask):
         """Forward pass of the encoder.
         """
+        h_t, c_t = self.init_hidden(x.shape[0])
         if self.use_joints:
             #TODO: add the joints to the input
             print_warning("Joints are not yet implemented in the LSTM model.")
@@ -205,19 +206,10 @@ class LstmAutoencoder(LightningModule):
         """
         # find size of different input dimensions
         b, seq_len, _, h, w = x.size()
-        mask = torch.ones(b, 3, device=x.device)
-
-        # initialize hidden states
-        h_t = []
-        c_t = []
-        for i in range(len(self.encoder.convLSTMs)):
-            new_h, new_c = self.encoder.convLSTMs[i].init_hidden(b, image_size=(h//2**i, w//2**i))
-            h_t.append(new_h)
-            c_t.append(new_c)
-            
+        mask = torch.ones(b, 3, device=x.device)            
 
         # autoencoder forward
-        encoder_vectors = self.encoder(x, mask, h_t, c_t)
+        encoder_vectors = self.encoder(x, mask)
         outputs = []
         for vec in encoder_vectors:
             outputs.append(self.decoder(vec))

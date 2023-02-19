@@ -132,13 +132,8 @@ class LstmClassifier(LightningModule):
         if self.use_joints:
            raise NotImplementedError("Not implemented yet")
 
-        # find size of different input dimensions
-        b, seq_len, _, h, w = x_frames.size()
-
-        h_t, c_t = self.encoder.init_hidden(b)
-
         # autoencoder forward
-        encoder_out = self.encoder(x_frames, mask, h_t, c_t)
+        encoder_out = self.encoder(x_frames, mask)
 
         encoder_out = encoder_out[-1]
         # decode
