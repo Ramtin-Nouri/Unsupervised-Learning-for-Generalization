@@ -6,6 +6,7 @@
     "input_length": 45,
     "init_length": 3,
     "input_stride": 2,
+    "use_joints": false,
     "output_dir": "output",
     "learning_rate": 0.001,
     "early_stopping_patience": 10,
@@ -27,7 +28,8 @@
         "num_training_samples_unsupervised": 500,
         "num_validation_samples_unsupervised": 200,
         "sentence_length": 4,
-        "dictionary_size": 19
+        "multi_sentence": true,
+        "dictionary_size": 22
     },
     "wandb":{
         "project":"ARCGEN",

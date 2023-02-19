@@ -23,7 +23,7 @@
         "use_resnet": false
     },
     "dataset":{
-        "data_path": "dataset/",
+        "data_path": "dataset_casper/",
         "dataset_name": "Multimodal",
         "width": 398,
         "height": 224,
@@ -38,6 +38,7 @@
         "different_actions": 4,
         "num_joints": 6,
         "sentence_length": 3,
+        "multi_sentence": false,
         "dictionary_size": 19
     },
     "wandb":{
