@@ -26,6 +26,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/default.json", required=True)
     parser.add_argument("--debug", type=bool, default=False)
+    parser.add_argument("--no-log", type=bool, default=False) # if True, no wandb logging is done
     parser.add_argument("--mode", type=str, default="both", required=True, help="supervised, unsupervised or both")
     parser.add_argument("--unsupervised_model", type=str, default=None, help="path to unsupervised model. Has to be specified if mode is supervised")
 
@@ -184,7 +185,8 @@ def train_unsupervised(config, wandb_logger):
     unsupervised_datamodule = dataset.DataModule(config, True)
     unsupervised_model = LstmAutoencoder(config)
     print("Unsupervised model:", unsupervised_model)
-    wandb_logger.watch(unsupervised_model, log="all")
+    if wandb_logger is not None:
+        wandb_logger.watch(unsupervised_model, log="all")
 
     unsupervised_checkpt = pl.callbacks.ModelCheckpoint(
         dirpath=config["model_path"],
@@ -221,7 +223,8 @@ def train_unsupervised(config, wandb_logger):
             if config["use_joints"]:
                 pred = pred[0]
             target = batch[0][0][-1]
-            wandb_logger.log_image(key=f"test_image", step=i, images=[pred, target], caption=["prediction", "target"])
+            if wandb_logger is not None:
+                wandb_logger.log_image(key=f"test_image", step=i, images=[pred, target], caption=["prediction", "target"])
             i += 1
 
     if config["debug"]:
@@ -265,7 +268,8 @@ def train_supervised(config, wandb_logger, encoder=None):
     supervised_datamodule = dataset.DataModule(config, False)
     supervised_model = LstmClassifier(config, encoder)
     print("Supervised model:", supervised_model)
-    wandb_logger.watch(supervised_model, log="all")
+    if wandb_logger is not None:
+        wandb_logger.watch(supervised_model, log="all")
 
     supervised_checkpt = pl.callbacks.ModelCheckpoint(
         dirpath=config["model_path"],
@@ -323,19 +327,23 @@ def test_supervised(config, wandb_logger, model, datamodule):
     val_confusion_matrix_relative = get_relative_confusion_matrix(val_confusion_matrix_absolute)
 
     plt = create_confusion_matrix_plt(train_confusion_matrix_absolute, f"Final-training-absolute-{config['run_name']}", False)
-    wandb_logger.log_image(key="Final-training-absolute", images=[plt])
+    if wandb_logger is not None:
+        wandb_logger.log_image(key="Final-training-absolute", images=[plt])
     plt.close()
 
     plt = create_confusion_matrix_plt(train_confusion_matrix_relative, f"Final-training-relative-{config['run_name']}", True)
-    wandb_logger.log_image(key="Final-training-relative", images=[plt])
+    if wandb_logger is not None:
+        wandb_logger.log_image(key="Final-training-relative", images=[plt])
     plt.close()
 
     plt = create_confusion_matrix_plt(val_confusion_matrix_absolute, f"Final-validation-absolute-{config['run_name']}", False)
-    wandb_logger.log_image(key="Final-validation-absolute", images=[plt])
+    if wandb_logger is not None:
+        wandb_logger.log_image(key="Final-validation-absolute", images=[plt])
     plt.close()
 
     plt = create_confusion_matrix_plt(val_confusion_matrix_relative, f"Final-validation-relative-{config['run_name']}", True)
-    wandb_logger.log_image(key="Final-validation-relative", images=[plt])
+    if wandb_logger is not None:
+        wandb_logger.log_image(key="Final-validation-relative", images=[plt])
     plt.close()
 
     final_train_accuracy = np.trace(train_confusion_matrix_absolute) * 100 / np.sum(train_confusion_matrix_absolute)
@@ -354,7 +362,8 @@ def test_supervised(config, wandb_logger, model, datamodule):
     final_val_object_accuracy = np.trace(val_confusion_matrix_absolute[4:13, 4:13]) * 100 / np.sum(
         val_confusion_matrix_absolute[4:13, 4:13])
 
-    wandb_logger.log_metrics({f"Final_training_sentence_wise_accuracy": final_train_sentence_wise_accuracy,
+    if wandb_logger is not None:
+        wandb_logger.log_metrics({f"Final_training_sentence_wise_accuracy": final_train_sentence_wise_accuracy,
                 f"Final_training_accuracy": final_train_accuracy,
                 f"Final_training_action_accuracy": final_train_action_accuracy,
                 f"Final_training_color_accuracy": final_train_color_accuracy,
@@ -390,22 +399,26 @@ def test_supervised(config, wandb_logger, model, datamodule):
 
     plt = create_confusion_matrix_plt(confusion_matrix_absolute,
                                         f"V{i}-test-absolute-{config['run_name']}", False)
-    wandb_logger.log_image(key=f"V{i}-test-absolute", images=[plt])
+    if wandb_logger is not None:
+        wandb_logger.log_image(key=f"V{i}-test-absolute", images=[plt])
     plt.close()
 
     plt = create_confusion_matrix_plt(confusion_matrix_relative,
                                         f"V{i}-test-relative-{config['run_name']}", True)
-    wandb_logger.log_image(key=f"V{i}-test-relative", images=[plt])
+    if wandb_logger is not None:
+        wandb_logger.log_image(key=f"V{i}-test-relative", images=[plt])
     plt.close()
 
     plt = create_confusion_matrix_plt(confusion_matrix_absolute_gen,
                                         f"V{i}-generalization-test-absolute-{config['run_name']}", False)
-    wandb_logger.log_image(key=f"V{i}-generalization-test-absolute", images=[plt])
+    if wandb_logger is not None:
+        wandb_logger.log_image(key=f"V{i}-generalization-test-absolute", images=[plt])
     plt.close()
 
     plt = create_confusion_matrix_plt(confusion_matrix_relative_gen,
                                         f"V{i}-generalization-test-relative-{config['run_name']}", True)
-    wandb_logger.log_image(key=f"V{i}-generalization-test-relative", images=[plt])
+    if wandb_logger is not None:
+        wandb_logger.log_image(key=f"V{i}-generalization-test-relative", images=[plt])
     plt.close()
 
     test_accuracy = np.trace(confusion_matrix_absolute) * 100 / np.sum(confusion_matrix_absolute)
@@ -427,7 +440,8 @@ def test_supervised(config, wandb_logger, model, datamodule):
     cf_matrices_absolute[i - 1] = confusion_matrix_absolute
     cf_matrices_absolute_gen[i - 1] = confusion_matrix_absolute_gen
 
-    wandb_logger.log_metrics({f"V{i}-test_sentence_wise_accuracy": sentence_wise_accuracy,
+    if wandb_logger is not None:
+        wandb_logger.log_metrics({f"V{i}-test_sentence_wise_accuracy": sentence_wise_accuracy,
                 f"V{i}-test_accuracy": test_accuracy,
                 f"V{i}-test_action_accuracy": test_action_accuracy,
                 f"V{i}-test_color_accuracy": test_color_accuracy,
@@ -450,13 +464,16 @@ def main(args):
     config["mode"] = args.mode 
     print("Config:", config)
 
-    wandb_logger = WandbLogger(
-        project=config["wandb_project"],
-        name=config["run_name"],
-        save_dir=config["output_dir"],
-        anonymous="allow",
-    )
-    wandb_logger.experiment.config.update(config)
+    if not args.no_log:
+        wandb_logger = WandbLogger(
+            project=config["wandb_project"],
+            name=config["run_name"],
+            save_dir=config["output_dir"],
+            anonymous="allow",
+        )
+        wandb_logger.experiment.config.update(config)
+    else:
+        wandb_logger = None # no logging
 
     if args.mode == "supervised":
         if args.unsupervised_model is None:
