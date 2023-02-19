@@ -88,7 +88,9 @@ class ClassificationLstmDecoder(LightningModule):
                 torch.zeros((self.num_layers, batch_size, self.hidden_size), device=device))
 
 class LstmClassifier(LightningModule):
-    """ LSTM model for classification. 
+    """ LSTM model for classification.
+
+    Joints are not used in this model. 
 
     Args:
         config (dict): Dictionary containing the configuration parameters.
@@ -98,10 +100,11 @@ class LstmClassifier(LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
+        #self.use_joints = config["use_joints"]
+        #self.num_joints = config["num_joints"]
+
         self.label_size = config["dictionary_size"]
-        self.use_joints = config["use_joints"]
         self.learning_rate = config["learning_rate"]
-        self.num_joints = config["num_joints"]
         self.sentence_length = config["sentence_length"]
         self.width = config["width"]
         self.height = config["height"]
@@ -145,23 +148,21 @@ class LstmClassifier(LightningModule):
         mask = mask.to(self.device) # don't know why this is necessary, but it is
         return mask
         
-    def forward(self, x_frames, mask, x_joints=None):
+    def forward(self, x_frames, mask):
         """ Forward pass of the model.
+
+        Frames and masks are passed to the encoder.
+        Encoder outputs a tensor for each frame, but only its last output is used.
+        The last output is passed to the decoder.
 
         Args:
             x_frames (torch.Tensor): Tensor containing the frames of the video. Shape: (batch_size, num_frames, 3, height, width) i.e. (batch_size, num_frames, 3, 224, 398)
-            x_joints (torch.Tensor): Tensor containing the joints of the video. Shape: (batch_size, num_frames, num_joints) i.e. (batch_size, num_frames, 6)
 
         Returns:
             torch.Tensor: Output of the model. Shape: (batch_size, sentence_length, label_size) i.e. (batch_size, 3, 19)
         """
-        # encode frames
-        if self.use_joints:
-           raise NotImplementedError("Not implemented yet")
-
-        # autoencoder forward
+        # encode
         encoder_out = self.encoder(x_frames, mask)
-
         encoder_out = encoder_out[-1]
         # decode
         decoder_out = self.decoder(x=encoder_out)
@@ -223,10 +224,7 @@ class LstmClassifier(LightningModule):
             augment_object = not mask[0][2]
             frames = self.augmentation(frames, augment_action, augment_color, augment_object)
 
-        if self.use_joints:
-            output = self(frames, mask, joints)
-        else:
-            output = self(frames, mask)
+        output = self(frames, mask)
         loss = self.loss(output, labels, mask)
         self.log('train_loss', loss)
         self.calculate_accuracy(output, labels, train=True)
@@ -254,10 +252,7 @@ class LstmClassifier(LightningModule):
         frames, joints, labels = batch
         mask = torch.ones(frames.size(0), 3, device=frames.device)
 
-        if self.use_joints:
-            output = self(frames, mask, joints)
-        else:
-            output = self(frames, mask)
+        output = self(frames, mask)
         loss = self.loss(output, labels, mask)
         lossname = f'val_loss'
         if dataloader_idx == 1:
