@@ -89,6 +89,7 @@ def load_config(config_path, debug=False):
     config["num_joints"] = dataset.get("num_joints", default["dataset"]["num_joints"])
     config["sentence_length"] = dataset.get("sentence_length", default["dataset"]["sentence_length"])
     config["dictionary_size"] = dataset.get("dictionary_size", default["dataset"]["dictionary_size"])
+    config["multi_sentence"] = dataset.get("multi_sentence", default["dataset"]["multi_sentence"])
 
     if debug:
         config["num_training_samples"] = 10

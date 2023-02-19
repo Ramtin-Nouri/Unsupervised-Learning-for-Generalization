@@ -31,7 +31,8 @@ class LstmEncoder(LightningModule):
         self.use_joints = config["use_joints"]
         self.height = config["height"]
         self.width = config["width"]
-        mask_channels = 3
+        self.sentence_length = config["sentence_length"]
+        mask_channels = self.sentence_length
         self.use_resnet = config["use_resnet"]
         if self.use_resnet:
             in_chan = 256
