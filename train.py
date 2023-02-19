@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from datetime import datetime
 import json
 import os
-import dataset
+import dataset_multimodal, dataset_arcgen
 from models.classifier_model import LstmClassifier
 from models.lstm_autoencoder import LstmAutoencoder
 from helper import *
@@ -73,6 +73,7 @@ def load_config(config_path, debug=False):
 
     # dataset related configs
     dataset = config_file.get("dataset", default["dataset"])
+    config["dataset_name"] = dataset.get("dataset_name", default["dataset"]["dataset_name"]) # Multimodal or ARC-GEN
     config["width"] = dataset.get("width", default["dataset"]["width"])
     config["height"] = dataset.get("height", default["dataset"]["height"])
     config["data_path"] = dataset.get("data_path", default["dataset"]["data_path"])
@@ -182,7 +183,10 @@ def train_unsupervised(config, wandb_logger):
     Returns:
         LstmAutoencoder: Trained unsupervised model.
     """
-    unsupervised_datamodule = dataset.DataModule(config, True)
+    if config["dataset_name"] == "Multimodal":
+        unsupervised_datamodule = dataset_multimodal.DataModule(config, True)
+    else:
+        raise NotImplementedError("ARC-Gen unsupervised not implemented, yet.")
     unsupervised_model = LstmAutoencoder(config)
     print("Unsupervised model:", unsupervised_model)
     if wandb_logger is not None:
@@ -265,7 +269,10 @@ def train_supervised(config, wandb_logger, encoder=None):
         LstmAutoencoder: Trained supervised model.
         datamodule (DataModule): Supervised datamodule.
     """
-    supervised_datamodule = dataset.DataModule(config, False)
+    if config["dataset_name"] == "Multimodal":
+        supervised_datamodule = dataset_multimodal.DataModule(config, False)
+    else:
+        supervised_datamodule = dataset_arcgen.DataModule(config)
     supervised_model = LstmClassifier(config, encoder)
     print("Supervised model:", supervised_model)
     if wandb_logger is not None:

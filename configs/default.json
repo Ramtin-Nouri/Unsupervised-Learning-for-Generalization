@@ -24,6 +24,7 @@
     },
     "dataset":{
         "data_path": "dataset/",
+        "dataset_name": "Multimodal",
         "width": 398,
         "height": 224,
         "num_training_samples": 5000,
