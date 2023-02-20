@@ -307,6 +307,42 @@ def train_supervised(config, wandb_logger, encoder=None):
     best = load_model(supervised_checkpt.best_model_path, is_unsupervised=False, encoder=encoder)
     return best,supervised_datamodule
 
+def evaluate(config, wandb_logger, model, dataloader, name):
+    """Evaluate the model on the given dataloader."""
+    # ugly compatibility stuff
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # TODO: avoid passing device, use pytorch lightning
+    model.to(device)
+
+    confusion_matrix_absolute, sentence_wise_accuracy = get_evaluation(
+        model,
+        dataloader,
+        device,
+        config,
+        name)
+
+    plt = create_confusion_matrix_plt(confusion_matrix_absolute, f"{name}-absolute-{config['run_name']}", False)
+    if wandb_logger is not None:
+        wandb_logger.log_image(key=f"{name}-absolute", images=[plt])
+    plt.close
+
+    confusion_matrix_relative = get_relative_confusion_matrix(confusion_matrix_absolute)
+    plt = create_confusion_matrix_plt(confusion_matrix_relative, f"{name}-relative-{config['run_name']}", True)
+    if wandb_logger is not None:
+        wandb_logger.log_image(key=f"{name}-relative", images=[plt])
+    plt.close
+    
+    accuracy = np.trace(confusion_matrix_absolute) * 100 / np.sum(confusion_matrix_absolute)
+    action_accuracy = np.trace(confusion_matrix_absolute[:4, :4]) * 100 / np.sum(confusion_matrix_absolute[:4, :4])
+    color_accuracy = np.trace(confusion_matrix_absolute[13:19, 13:19]) * 100 / np.sum(confusion_matrix_absolute[13:19, 13:19])
+    object_accuracy = np.trace(confusion_matrix_absolute[4:13, 4:13]) * 100 / np.sum(confusion_matrix_absolute[4:13, 4:13])
+    if wandb_logger is not None:
+        wandb_logger.log_metrics({f"{name}_sentence_wise_accuracy": sentence_wise_accuracy,
+                f"{name}_accuracy": accuracy,
+                f"{name}_action_accuracy": action_accuracy,
+                f"{name}_color_accuracy": color_accuracy,
+                f"{name}_object_accuracy": object_accuracy})
+    return sentence_wise_accuracy
+
 
 def test_supervised(config, wandb_logger, model, datamodule):
     """Test the supervised model.
@@ -317,147 +353,25 @@ def test_supervised(config, wandb_logger, model, datamodule):
         model (LstmClassifier): Trained supervised model.
         datamodule (DataModule): DataModule.
     """
-    # ugly compatibility stuff
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # TODO: avoid passing device, use pytorch lightning
-    model.to(device)
+    evaluate(config, wandb_logger, model, datamodule.train_dataloader(), "Final-training")
+    evaluate(config, wandb_logger, model, datamodule.val_dataloader()[0], "Final-validation")
 
-    train_confusion_matrix_absolute, final_train_sentence_wise_accuracy = get_evaluation(
-        model, datamodule.train_dataloader(),
-        device,
-        config,
-        f"Final training")
-    val_confusion_matrix_absolute, final_val_sentence_wise_accuracy = get_evaluation(
-        model,
-        datamodule.val_dataloader()[0],
-        device,
-        config,
-        f"Final validation")
-
-    train_confusion_matrix_relative = get_relative_confusion_matrix(train_confusion_matrix_absolute)
-    val_confusion_matrix_relative = get_relative_confusion_matrix(val_confusion_matrix_absolute)
-
-    plt = create_confusion_matrix_plt(train_confusion_matrix_absolute, f"Final-training-absolute-{config['run_name']}", False)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key="Final-training-absolute", images=[plt])
-    plt.close()
-
-    plt = create_confusion_matrix_plt(train_confusion_matrix_relative, f"Final-training-relative-{config['run_name']}", True)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key="Final-training-relative", images=[plt])
-    plt.close()
-
-    plt = create_confusion_matrix_plt(val_confusion_matrix_absolute, f"Final-validation-absolute-{config['run_name']}", False)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key="Final-validation-absolute", images=[plt])
-    plt.close()
-
-    plt = create_confusion_matrix_plt(val_confusion_matrix_relative, f"Final-validation-relative-{config['run_name']}", True)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key="Final-validation-relative", images=[plt])
-    plt.close()
-
-    final_train_accuracy = np.trace(train_confusion_matrix_absolute) * 100 / np.sum(train_confusion_matrix_absolute)
-    final_train_action_accuracy = np.trace(train_confusion_matrix_absolute[:4, :4]) * 100 / np.sum(
-        train_confusion_matrix_absolute[:4, :4])
-    final_train_color_accuracy = np.trace(train_confusion_matrix_absolute[13:19, 13:19]) * 100 / np.sum(
-        train_confusion_matrix_absolute[13:19, 13:19])
-    final_train_object_accuracy = np.trace(train_confusion_matrix_absolute[4:13, 4:13]) * 100 / np.sum(
-        train_confusion_matrix_absolute[4:13, 4:13])
-
-    final_val_accuracy = np.trace(val_confusion_matrix_absolute) * 100 / np.sum(val_confusion_matrix_absolute)
-    final_val_action_accuracy = np.trace(val_confusion_matrix_absolute[:4, :4]) * 100 / np.sum(
-        val_confusion_matrix_absolute[:4, :4])
-    final_val_color_accuracy = np.trace(val_confusion_matrix_absolute[13:19, 13:19]) * 100 / np.sum(
-        val_confusion_matrix_absolute[13:19, 13:19])
-    final_val_object_accuracy = np.trace(val_confusion_matrix_absolute[4:13, 4:13]) * 100 / np.sum(
-        val_confusion_matrix_absolute[4:13, 4:13])
-
-    if wandb_logger is not None:
-        wandb_logger.log_metrics({f"Final_training_sentence_wise_accuracy": final_train_sentence_wise_accuracy,
-                f"Final_training_accuracy": final_train_accuracy,
-                f"Final_training_action_accuracy": final_train_action_accuracy,
-                f"Final_training_color_accuracy": final_train_color_accuracy,
-                f"Final_training_object_accuracy": final_train_object_accuracy,
-
-                f"Final_validation_sentence_wise_accuracy": final_val_sentence_wise_accuracy,
-                f"Final_validation_accuracy": final_val_accuracy,
-                f"Final_validation_action_accuracy": final_val_action_accuracy,
-                f"Final_validation_color_accuracy": final_val_color_accuracy,
-                f"Final_validation_object_accuracy": final_val_object_accuracy})
-
-    cf_matrices_absolute = np.zeros((6, 19, 19))
-    cf_matrices_absolute_gen = np.zeros((6, 19, 19))
+    #cf_matrices_absolute = np.zeros((6, 19, 19))
+    #cf_matrices_absolute_gen = np.zeros((6, 19, 19))
 
     i = config["visible_objects"]
     test_data = datamodule.create_dataset(i, 0, 0, False, "constant-test")
     gen_test_data = datamodule.create_dataset(i, 0, 0, False, "generalization-test")
 
-        # dataloader
+    # dataloader
     test_loader = DataLoader(dataset=test_data, batch_size=config["batch_size"], shuffle=False,
                                 num_workers=config["num_workers"])
     gen_test_loader = DataLoader(dataset=gen_test_data, batch_size=config["batch_size"], shuffle=False,
                                     num_workers=config["num_workers"])
+    
+    sentence_wise_accuracy = evaluate(config, wandb_logger, model, test_loader, f"V{i}-test")
+    sentence_wise_accuracy_gen = evaluate(config, wandb_logger, model, gen_test_loader, f"V{i}-generalization-test")
 
-    confusion_matrix_absolute,  sentence_wise_accuracy = get_evaluation(model, test_loader, device, config, f"V{i} test")
-    confusion_matrix_absolute_gen,  sentence_wise_accuracy_gen = get_evaluation(model, gen_test_loader, device, config, f"V{i} generalization test")
-
-    confusion_matrix_relative = get_relative_confusion_matrix(confusion_matrix_absolute)
-    confusion_matrix_relative_gen = get_relative_confusion_matrix(confusion_matrix_absolute_gen)
-
-    plt = create_confusion_matrix_plt(confusion_matrix_absolute,
-                                        f"V{i}-test-absolute-{config['run_name']}", False)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key=f"V{i}-test-absolute", images=[plt])
-    plt.close()
-
-    plt = create_confusion_matrix_plt(confusion_matrix_relative,
-                                        f"V{i}-test-relative-{config['run_name']}", True)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key=f"V{i}-test-relative", images=[plt])
-    plt.close()
-
-    plt = create_confusion_matrix_plt(confusion_matrix_absolute_gen,
-                                        f"V{i}-generalization-test-absolute-{config['run_name']}", False)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key=f"V{i}-generalization-test-absolute", images=[plt])
-    plt.close()
-
-    plt = create_confusion_matrix_plt(confusion_matrix_relative_gen,
-                                        f"V{i}-generalization-test-relative-{config['run_name']}", True)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key=f"V{i}-generalization-test-relative", images=[plt])
-    plt.close()
-
-    test_accuracy = np.trace(confusion_matrix_absolute) * 100 / np.sum(confusion_matrix_absolute)
-    test_action_accuracy = np.trace(confusion_matrix_absolute[:4, :4]) * 100 / np.sum(
-        confusion_matrix_absolute[:4, :4])
-    test_color_accuracy = np.trace(confusion_matrix_absolute[13:19, 13:19]) * 100 / np.sum(
-        confusion_matrix_absolute[13:19, 13:19])
-    test_object_accuracy = np.trace(confusion_matrix_absolute[4:13, 4:13]) * 100 / np.sum(
-        confusion_matrix_absolute[4:13, 4:13])
-
-    gen_test_accuracy = np.trace(confusion_matrix_absolute_gen) * 100 / np.sum(confusion_matrix_absolute_gen)
-    gen_test_action_accuracy = np.trace(confusion_matrix_absolute_gen[:4, :4]) * 100 / np.sum(
-        confusion_matrix_absolute_gen[:4, :4])
-    gen_test_color_accuracy = np.trace(confusion_matrix_absolute_gen[13:19, 13:19]) * 100 / np.sum(
-        confusion_matrix_absolute_gen[13:19, 13:19])
-    gen_test_object_accuracy = np.trace(confusion_matrix_absolute_gen[4:13, 4:13]) * 100 / np.sum(
-        confusion_matrix_absolute_gen[4:13, 4:13])
-
-    cf_matrices_absolute[i - 1] = confusion_matrix_absolute
-    cf_matrices_absolute_gen[i - 1] = confusion_matrix_absolute_gen
-
-    if wandb_logger is not None:
-        wandb_logger.log_metrics({f"V{i}-test_sentence_wise_accuracy": sentence_wise_accuracy,
-                f"V{i}-test_accuracy": test_accuracy,
-                f"V{i}-test_action_accuracy": test_action_accuracy,
-                f"V{i}-test_color_accuracy": test_color_accuracy,
-                f"V{i}-test_object_accuracy": test_object_accuracy,
-                f"V{i}-generalization_test_sentence_wise_accuracy": sentence_wise_accuracy_gen,
-                f"V{i}-generalization_test_accuracy": gen_test_accuracy,
-                f"V{i}-generalization_test_action_accuracy": gen_test_action_accuracy,
-                f"V{i}-generalization_test_color_accuracy": gen_test_color_accuracy,
-                f"V{i}-generalization_test_object_accuracy": gen_test_object_accuracy})
     print_with_time(f"Test accuracy: {np.mean(sentence_wise_accuracy):8.4f}%")
     print_with_time(f"Generalization test accuracy: {np.mean(sentence_wise_accuracy_gen):8.4f}%")
 
