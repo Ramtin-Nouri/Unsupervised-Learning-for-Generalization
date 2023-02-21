@@ -22,7 +22,7 @@ def get_relative_confusion_matrix(confusion_matrix):
     return confusion_matrix_relative
 
 
-def create_confusion_matrix_plt(plot_matrix, title, floating):
+def create_confusion_matrix_plt(plot_matrix, title, floating, dictionary):
     """ Creates a confusion matrix plot.
 
     Args:
@@ -30,9 +30,6 @@ def create_confusion_matrix_plt(plot_matrix, title, floating):
         title (str): The title of the plot.
         floating (bool): If True the values are floating point numbers, otherwise integers (percentage).
     """
-    dictionary = ["put down", "picked up", "pushed left", "pushed right",
-                  "apple", "banana", "cup", "football", "book", "pylon", "bottle", "star", "ring",
-                  "red", "green", "blue", "yellow", "white", "brown"]
     fig, ax = plt.subplots()
     im = ax.imshow(plot_matrix, vmin=0.0, vmax=np.max(plot_matrix))
 
