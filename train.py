@@ -349,9 +349,9 @@ def evaluate(config, wandb_logger, model, dataloader, name):
         action_accuracy  = np.trace(confusion_matrix_absolute[1:6, 1:6]) * 100 / np.sum(confusion_matrix_absolute[1:6, 1:6])
         material_accuracy = np.trace(confusion_matrix_absolute[6:8, 6:8]) * 100 / np.sum(confusion_matrix_absolute[6:8, 6:8])
         color_accuracy   = np.trace(confusion_matrix_absolute[8:17, 8:17]) * 100 / np.sum(confusion_matrix_absolute[8:17, 8:17])
-        shape_accuracy   = np.trace(confusion_matrix_absolute[17:22, 17:22]) * 100 / np.sum(confusion_matrix_absolute[17:22, 17:22])
+        object_accuracy   = np.trace(confusion_matrix_absolute[17:22, 17:22]) * 100 / np.sum(confusion_matrix_absolute[17:22, 17:22])
         if wandb_logger is not None:
-            wandb_logger.log_metrics({f"{name}_material_accuracy": material_accuracy, f"{name}_shape_accuracy": shape_accuracy})
+            wandb_logger.log_metrics({f"{name}_material_accuracy": material_accuracy})
     if wandb_logger is not None:
         wandb_logger.log_metrics({f"{name}_sentence_wise_accuracy": sentence_wise_accuracy,
                 f"{name}_accuracy": accuracy,
@@ -373,8 +373,8 @@ def test_supervised(config, wandb_logger, model, datamodule):
     evaluate(config, wandb_logger, model, datamodule.train_dataloader(), "Final-training")
     evaluate(config, wandb_logger, model, datamodule.val_dataloader()[0], "Final-validation")
 
+    i = config["visible_objects"]
     if config["dataset_name"] == "Multimodal":
-        i = config["visible_objects"]
         test_data = datamodule.create_dataset(i, 0, 0, False, "constant-test")
         test_loader = DataLoader(dataset=test_data, batch_size=config["batch_size"], shuffle=False,
                                     num_workers=config["num_workers"])
