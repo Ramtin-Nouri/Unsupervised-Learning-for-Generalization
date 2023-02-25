@@ -277,16 +277,18 @@ def train_supervised(config, wandb_logger, encoder):
     print("Supervised model:", supervised_model)
     wandb_logger.watch(supervised_model, log="all")
 
+    val_loss = "val_loss" if config["dataset_name"] == "CATER" else "val_loss/dataloader_idx_0"
+
     supervised_checkpt = pl.callbacks.ModelCheckpoint(
         dirpath=config["model_path"],
         save_top_k=1,
         verbose=True,
-        monitor="val_loss/dataloader_idx_0",
+        monitor=val_loss,
         mode="min",
         filename='supervised_{epoch}-{val_loss:.3f}'
     )
 
-    early_stopping = EarlyStopping(monitor="val_loss/dataloader_idx_0", patience=config["early_stopping_patience"], mode="min")
+    early_stopping = EarlyStopping(monitor=val_loss, patience=config["early_stopping_patience"], mode="min")
     callbacks = [supervised_checkpt, early_stopping] if not config["debug"] else []
 
     supervised_trainer = pl.Trainer(
