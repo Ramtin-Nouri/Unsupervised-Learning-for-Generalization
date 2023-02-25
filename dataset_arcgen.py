@@ -11,12 +11,13 @@ class ArcGenDataset(Dataset):
         self.mode = mode
         self.data_path = config['data_path']
 
-        self.train_data, self.val_data, self.test_data = self.load_data()
+        self.train_data, self.val_data, self.test_data, self.test_val_data = self.load_data()
 
     def load_data(self):
         train_data = []
         val_data = []
         test_data = []
+        test_val_data = []
 
         with open(os.path.join(self.data_path, 'train.txt'), 'r') as f:
             for line in f:
@@ -29,8 +30,12 @@ class ArcGenDataset(Dataset):
         with open(os.path.join(self.data_path, 'test.txt'), 'r') as f:
             for line in f:
                 test_data.append(line.strip())
+        
+        with open(os.path.join(self.data_path, 'test_val.txt'), 'r') as f:
+            for line in f:
+                test_val_data.append(line.strip())
 
-        return train_data, val_data, test_data
+        return train_data, val_data, test_data, test_val_data
 
     def __len__(self):
         if self.config['debug']:
@@ -39,6 +44,8 @@ class ArcGenDataset(Dataset):
             return len(self.train_data)
         elif self.mode == 'val':
             return len(self.val_data)
+        elif self.mode == 'test_val':
+            return len(self.test_val_data)
         else:
             return len(self.test_data)
 
@@ -47,6 +54,8 @@ class ArcGenDataset(Dataset):
             data_point = self.train_data[idx]
         elif self.mode == 'val':
             data_point = self.val_data[idx]
+        elif self.mode == 'test_val':
+            data_point = self.test_val_data[idx]
         else:
             data_point = self.test_data[idx]
 
@@ -97,13 +106,15 @@ class DataModule(LightningDataModule):
         self.train_dataset = ArcGenDataset(self.config, mode='train')
         self.val_dataset = ArcGenDataset(self.config, mode='val')
         self.test_dataset = ArcGenDataset(self.config, mode='test')
+        self.test_val_dataset = ArcGenDataset(self.config, mode='test_val')
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.config['batch_size'], shuffle=True, num_workers=self.config["num_workers"])
 
     def val_dataloader(self):
         val_loader = DataLoader(self.val_dataset, batch_size=self.config['batch_size'], shuffle=False, num_workers=self.config["num_workers"])
-        return [val_loader, val_loader] #TODO: use small subset of comp-gen test for validation
+        test_val_loader = DataLoader(self.test_val_dataset, batch_size=self.config['batch_size'], shuffle=False, num_workers=self.config["num_workers"])
+        return [val_loader, test_val_loader]
 
     def test_dataloader(self):
         return DataLoader(self.test_dataset, batch_size=self.config['batch_size'], shuffle=False, num_workers=self.config["num_workers"])
