@@ -83,42 +83,61 @@ def get_evaluation(model, data_loader, device, config, description=""):
         outputs = []
         labels = []
         correct_sentences = 0
+        # Iterate over all batches and collect the outputs and labels.
         for batch in tqdm(data_loader, desc=description):
-            if len(batch) == 2:
-                frames_batch, label_batch = batch 
+            if len(batch) == 2: #ARC-GEN
+                frames_batch, label_batch = batch
+                frames_batch = frames_batch.to(device=device)  # (N, L, c, w, h)
+                mask = torch.ones(frames_batch.size(0), label_batch.size(1), device=frames_batch.device)
+                multi_sentence_length = label_batch.size(1)
+                output_batch = model(frames_batch, mask, multi_sentence_length) # (N, L, D)
             else:
                 frames_batch, joints_batch, label_batch = batch
-            frames_batch = frames_batch.to(device=device)  # (N, L, c, w, h)
-            mask = torch.ones(frames_batch.size(0), label_batch.size(1), device=frames_batch.device)
+                frames_batch = frames_batch.to(device=device)  # (N, L, c, w, h)
+                mask = torch.ones(frames_batch.size(0), label_batch.size(1), device=frames_batch.device)
 
-            output_batch = model(frames_batch, mask)#, joints_batch)
-            outputs.append(output_batch)
-            labels.append(label_batch)
+                output_batch = model(frames_batch, mask)
+                
+            outputs.append(output_batch) # (data_size, N, L, D)
+            labels.append(label_batch) # (data_size, N, L)
 
-        outputs = torch.cat(outputs, dim=1)
-        labels = torch.cat(labels, dim=1)
 
         if config["multi_sentence"]:
-            for i in range(outputs.shape[1]//4):
-                _, action_outputs = torch.max(outputs[:, i*4, :], dim=1)
-                _, color_outputs = torch.max(outputs[:, i*4+1, :], dim=1)
-                _, material_outputs = torch.max(outputs[:, i*4+2, :], dim=1)
-                _, object_outputs = torch.max(outputs[:, i*4+3, :], dim=1)
+            for l in range(len(outputs)):
+                # outputs[l] is (N, L, D) aka 1 sentence
+                output = outputs[l]
+                for n in range(output.shape[0]): # iterate over batch size
 
-                for n in range(outputs.shape[0]):
-                    confusion_matrix[int(labels[n, 0].item()), (action_outputs[n].item())] += 1
-                    confusion_matrix[int(labels[n, 1].item()), (color_outputs[n].item())] += 1
-                    confusion_matrix[int(labels[n, 2].item()), (material_outputs[n].item())] += 1
-                    confusion_matrix[int(labels[n, 3].item()), (object_outputs[n].item())] += 1
+                    for i in range(outputs[l].shape[1] // 4):
+                        # Get the output and label for the current batch.
+                        _, action_outputs   = torch.max(output[n, 0, :], dim=0)
+                        _, color_outputs    = torch.max(output[n, 1, :], dim=0)
+                        _, material_outputs = torch.max(output[n, 2, :], dim=0)
+                        _, object_outputs   = torch.max(output[n, 3, :], dim=0)
+                        
+                        action_labels   = int(labels[l][n][0].item())
+                        color_labels    = int(labels[l][n][1].item())
+                        material_labels = int(labels[l][n][2].item())
+                        object_labels   = int(labels[l][n][3].item())
 
-                    action_correct = torch.sum(action_outputs[n] == labels[n, 0])
-                    color_correct = torch.sum(color_outputs[n] == labels[n, 1])
-                    material_correct = torch.sum(material_outputs[n] == labels[n, 2])
-                    object_correct = torch.sum(object_outputs[n] == labels[n, 2])
+                        all_sentence_correct = False
+                        confusion_matrix[action_labels, (action_outputs.item())] += 1
+                        confusion_matrix[color_labels, (color_outputs.item())] += 1
+                        confusion_matrix[material_labels, (material_outputs.item())] += 1
+                        confusion_matrix[object_labels, (object_outputs.item())] += 1
 
-                    if action_correct and color_correct and object_correct and material_correct:
+                        action_correct = torch.sum(action_outputs == action_labels)
+                        color_correct = torch.sum(color_outputs == color_labels)
+                        material_correct = torch.sum(material_outputs == material_labels)
+                        object_correct = torch.sum(object_outputs == object_labels)
+
+                        all_sentence_correct &= action_correct and color_correct and object_correct and material_correct
+
+                    if all_sentence_correct:
                         correct_sentences += 1
         else:
+            outputs = torch.cat(dim=1)
+            labels = torch.cat(dim=1)
             _, action_outputs = torch.max(outputs[:, 0, :], dim=1)
             _, color_outputs = torch.max(outputs[:, 1, :], dim=1)
             _, object_outputs = torch.max(outputs[:, 2, :], dim=1)
