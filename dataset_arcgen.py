@@ -3,13 +3,15 @@ import cv2
 import os
 import torch
 from pytorch_lightning import LightningDataModule
+from torchvision import transforms
 
 class ArcGenDataset(Dataset):
-    def __init__(self, config, mode='train'):
+    def __init__(self, config, mode='train', transform=None):
         self.config = config
         self.stride = config['input_stride']
         self.mode = mode
         self.data_path = config['data_path']
+        self.transform = transform
 
         self.train_data, self.val_data, self.test_data, self.test_val_data = self.load_data()
 
@@ -93,20 +95,25 @@ class ArcGenDataset(Dataset):
         frames = torch.stack(frames)
         frames = frames.permute(0, 3, 1, 2)
         frames = frames.float() / 255.0
-        frames = frames - 0.5 # TODO: do proper normalization
+        if self.transform is not None:
+            frames = self.transform(frames)
+        else:
+            frames = frames - 0.5
         return frames
 
 class DataModule(LightningDataModule):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        # TODO: add transforms
+        mean = torch.tensor([0.4569, 0.4648, 0.4688])
+        std = torch.tensor([0.0166, 0.0153, 0.0153])
+        self.transform = transforms.Normalize(mean, std)
 
     def setup(self, stage=None):
-        self.train_dataset = ArcGenDataset(self.config, mode='train')
-        self.val_dataset = ArcGenDataset(self.config, mode='val')
-        self.test_dataset = ArcGenDataset(self.config, mode='test')
-        self.test_val_dataset = ArcGenDataset(self.config, mode='test_val')
+        self.train_dataset = ArcGenDataset(self.config, mode='train', transform=self.transform)
+        self.val_dataset = ArcGenDataset(self.config, mode='val', transform=self.transform)
+        self.test_dataset = ArcGenDataset(self.config, mode='test', transform=self.transform)
+        self.test_val_dataset = ArcGenDataset(self.config, mode='test_val', transform=self.transform)
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.config['batch_size'], shuffle=True, num_workers=self.config["num_workers"])
