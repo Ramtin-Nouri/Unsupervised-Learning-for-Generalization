@@ -32,7 +32,10 @@ class LstmEncoder(LightningModule):
         self.height = config["height"]
         self.width = config["width"]
         self.sentence_length = config["sentence_length"]
+        self.use_mask = config["use_mask"]
         mask_channels = self.sentence_length
+        if not self.use_mask:
+            mask_channels = 0
         self.use_resnet = config["use_resnet"]
         if self.use_resnet:
             in_chan = 256
@@ -70,7 +73,7 @@ class LstmEncoder(LightningModule):
 
         self.maxpool = nn.MaxPool3d(kernel_size=(1, 2, 2))
 
-    def forward(self, x, mask):
+    def forward(self, x, mask=None):
         """Forward pass of the encoder.
         """
         h_t, c_t = self.init_hidden(x.shape[0])
@@ -83,8 +86,9 @@ class LstmEncoder(LightningModule):
         for t in range(seq_len):
             x_t = x[:, t, :, :, :]
             #add the mask to the input
-            mask_expanded = mask.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, x_t.shape[2], x_t.shape[3])
-            x_t = torch.cat((x_t, mask_expanded), dim=1)
+            if self.use_mask:
+                mask_expanded = mask.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, x_t.shape[2], x_t.shape[3])
+                x_t = torch.cat((x_t, mask_expanded), dim=1)
             for i in range(len(self.convLSTMs)):
                 h_t[i], c_t[i] = self.convLSTMs[i](x_t, (h_t[i], c_t[i]))
                 x_t = self.maxpool(h_t[i])

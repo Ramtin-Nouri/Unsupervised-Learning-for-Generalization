@@ -115,6 +115,7 @@ class LstmClassifier(LightningModule):
         self.dataset = config["dataset_name"]
         self.width = config["width"]
         self.height = config["height"]
+        self.use_mask = config["use_mask"]
         self.use_augmentation = config["data_augmentation"]
         if self.use_augmentation:
             self.augmentation = DataAugmentation()
@@ -126,7 +127,8 @@ class LstmClassifier(LightningModule):
             self.encoder.freeze()
             self.encoder.requires_grad = False # Freeze the encoder 
         self.decoder = ClassificationLstmDecoder(config)
-        self.create_masks()
+        if self.use_mask:
+            self.create_masks()
 
         self.loss_fn = nn.CrossEntropyLoss()
         self.reset_metrics_train()
@@ -163,7 +165,7 @@ class LstmClassifier(LightningModule):
         mask = mask.to(self.device) # don't know why this is necessary, but it is
         return mask
         
-    def forward(self, x_frames, mask, multi_sentence_length=0):
+    def forward(self, x_frames, mask=None, multi_sentence_length=0):
         """ Forward pass of the model.
 
         Frames and masks are passed to the encoder.
@@ -177,7 +179,10 @@ class LstmClassifier(LightningModule):
             torch.Tensor: Output of the model. Shape: (batch_size, sentence_length, label_size) i.e. (batch_size, 3, 19)
         """
         # encode
-        shortened_mask = mask[:, :self.sentence_length]
+        if self.use_mask:
+            shortened_mask = mask[:, :self.sentence_length]
+        else:
+            shortened_mask = None
         encoder_out = self.encoder(x_frames, shortened_mask)
         encoder_out = encoder_out[-1]
         # decode
@@ -200,7 +205,7 @@ class LstmClassifier(LightningModule):
             'monitor': 'val_loss/dataloader_idx_0'
         }
     
-    def loss(self, output, labels, mask):
+    def loss(self, output, labels, mask=None):
         """ Calculate the loss.
 
         Args:
@@ -212,6 +217,8 @@ class LstmClassifier(LightningModule):
         """
         batch_size = output.shape[0]
         loss = torch.zeros(batch_size, device=output.device)
+        if mask is None:
+            mask = torch.ones(batch_size, labels.shape[1], device=output.device)
         for i in range(labels.shape[1]):
             loss += self.loss_fn(output[:, i, :], labels[:, i]) * mask[:, i]
         
@@ -236,7 +243,10 @@ class LstmClassifier(LightningModule):
             frames, joints, labels = batch
         
         # random mask for each input
-        mask = self.get_random_mask(frames.size(0), labels.size(1))
+        if self.use_mask:
+            mask = self.get_random_mask(frames.size(0), labels.size(1))
+        else:
+            mask = None
 
         if self.use_augmentation:
             augment_action = not mask[0][0]
@@ -280,10 +290,12 @@ class LstmClassifier(LightningModule):
         else:
             frames, joints, labels = batch
 
-        if self.multi_sentence:
+        if self.multi_sentence and self.use_mask:
             mask = torch.ones(frames.size(0), labels.size(1), device=frames.device)
-        else:
+        elif self.use_mask:
             mask = torch.ones(frames.size(0), self.sentence_length, device=frames.device)
+        else:
+            mask = None
 
         if self.multi_sentence:
             output = self(frames, mask, multi_sentence_length=labels.shape[1])

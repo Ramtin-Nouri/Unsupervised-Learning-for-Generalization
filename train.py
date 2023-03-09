@@ -70,6 +70,7 @@ def load_config(config_path, debug=False):
     config["dropout_autoencoder"] = model.get("dropout_autoencoder", default["model"]["dropout_autoencoder"])
     config["dropout_classifier"] = model.get("dropout_classifier", default["model"]["dropout_classifier"])
     config["use_resnet"] = model.get("use_resnet", default["model"]["use_resnet"])
+    config["use_mask"] = model.get("use_mask", default["model"]["use_mask"])
 
     # dataset related configs
     dataset = config_file.get("dataset", default["dataset"])
