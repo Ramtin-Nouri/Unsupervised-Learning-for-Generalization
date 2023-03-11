@@ -12,6 +12,7 @@ class ArcGenDataset(Dataset):
         self.mode = mode
         self.data_path = config['data_path']
         self.transform = transform
+        self.SPLITDATASET = True # it's hardcoded for now. Will split each video into 3
 
         self.train_data, self.val_data, self.test_data, self.test_val_data = self.load_data()
 
@@ -41,38 +42,48 @@ class ArcGenDataset(Dataset):
 
     def __len__(self):
         if self.config['debug']:
-            return 10
-        if self.mode == 'train':
-            return len(self.train_data)
+            l = 10
+        elif self.mode == 'train':
+            l = len(self.train_data)
         elif self.mode == 'val':
-            return len(self.val_data)
+            l = len(self.val_data)
         elif self.mode == 'test_val':
-            return len(self.test_val_data)
+            l = len(self.test_val_data)
         else:
-            return len(self.test_data)
+            l = len(self.test_data)
+
+        if self.SPLITDATASET:
+            l = l * 3
+        return l
 
     def __getitem__(self, idx):
-        if self.mode == 'train':
-            data_point = self.train_data[idx]
-        elif self.mode == 'val':
-            data_point = self.val_data[idx]
-        elif self.mode == 'test_val':
-            data_point = self.test_val_data[idx]
+        if self.SPLITDATASET:
+            new_idx = idx // 3
         else:
-            data_point = self.test_data[idx]
+            new_idx = idx
+        if self.mode == 'train':
+            data_point = self.train_data[new_idx]
+        elif self.mode == 'val':
+            data_point = self.val_data[new_idx]
+        elif self.mode == 'test_val':
+            data_point = self.test_val_data[new_idx]
+        else:
+            data_point = self.test_data[new_idx]
 
         video_path = data_point.split(':')[0]
         video_path = os.path.join(self.data_path, 'images', video_path)
 
-        frames = self.load_video(video_path)
+        frames = self.load_video(video_path, 30*idx%3)
 
         label = data_point.split(':')[1].split(',')
         label = [int(x) for x in label]
+        if self.SPLITDATASET:
+            label = label[idx%3:idx%3+self.config["sentence_length"]]
         label = torch.tensor(label, dtype=torch.uint8)
 
         return frames, label
 
-    def load_video(self, video_path):
+    def load_video(self, video_path, idx):
         cap = cv2.VideoCapture(video_path)
         assert cap.isOpened(), f'Cannot capture source {video_path}'
         frames = []
@@ -81,6 +92,9 @@ class ArcGenDataset(Dataset):
             ret, frame = cap.read()
             if not ret:
                 break
+            if self.SPLITDATASET and i < idx:
+                i += 1
+                continue
             if i % self.stride != 0:
                 i += 1
                 continue

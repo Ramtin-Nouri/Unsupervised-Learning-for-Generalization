@@ -403,8 +403,12 @@ class LstmClassifier(LightningModule):
             labels (torch.Tensor): Labels of the data. Shape: (batch_size, sentence_length)
             train (bool): Whether to calculate the training accuracy or the validation accuracy.
         """
-        assert self.multi_sentence
-        for i in range(output.shape[1]//4):
+        if self.multi_sentence:
+            r = output.shape[1] // 4
+        else:
+            r = 1
+
+        for i in range(r):
             _, action_output_batch = torch.max(output[:, i*4, :], dim=1)
             _, color_output_batch = torch.max(output[:, i*4+1, :], dim=1)
             _, material_output_batch = torch.max(output[:, i*4+2, :], dim=1)

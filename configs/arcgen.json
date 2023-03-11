@@ -29,7 +29,7 @@
         "num_training_samples_unsupervised": 500,
         "num_validation_samples_unsupervised": 200,
         "sentence_length": 4,
-        "multi_sentence": true,
+        "multi_sentence": false,
         "dictionary_size": 22
     },
     "wandb":{

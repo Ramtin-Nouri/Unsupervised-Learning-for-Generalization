@@ -136,8 +136,8 @@ def get_evaluation(model, data_loader, device, config, description=""):
                     if all_sentence_correct:
                         correct_sentences += 1
         else:
-            outputs = torch.cat(dim=1)
-            labels = torch.cat(dim=1)
+            outputs = torch.cat(outputs, dim=1) 
+            labels = torch.cat(labels, dim=1)
             _, action_outputs = torch.max(outputs[:, 0, :], dim=1)
             _, color_outputs = torch.max(outputs[:, 1, :], dim=1)
             _, object_outputs = torch.max(outputs[:, 2, :], dim=1)
