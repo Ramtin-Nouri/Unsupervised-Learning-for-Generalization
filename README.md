@@ -1,5 +1,10 @@
 # Unsupervised-Learning-for-Generalization
-Repo of Master thesis Unsupervised Learning for Out-of-Distribution Generalization on a Multimodal Sequence Dataset
+Repo of Master thesis Unsupervised Learning for Out-of-Distribution Generalization on a Multimodal Sequence Dataset.  
+Train an action recognition model on Volquardsen et al.'s dataset or on Action Recogntion for Compositional-Generaliuation (ARC-GEN), a variation of the CATER dataset.  
+Inputs are image sequences and outputs are natural language sentences of the action using a fixed dictionary.
+
+# Abstract
+**TODO**
 
 # Usage
 ## Prerequisites
