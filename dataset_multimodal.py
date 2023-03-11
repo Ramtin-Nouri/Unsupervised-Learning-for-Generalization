@@ -27,6 +27,8 @@ class MultimodalSimulation(Dataset):
         input_length (int): Number of frames to use as input.for the model.
         frame_stride (int): Stride to use when reading in the frames.
         transform (callable, optional): Optional transform to be applied on a sample.
+        debug (bool, optional): If True, only a small subset of the dataset is used. Defaults to False.
+        offset (int, optional): Offset to use when reading in the data. Defaults to 0.
 
     Attributes:
         DICTIONARY (list): List of words in the dictionary.
@@ -34,6 +36,10 @@ class MultimodalSimulation(Dataset):
         HEIGHT (int): Height of the images.
         WIDTH (int): Width of the images.
         JOINTS (int): Number of joints in the robot arm.
+
+    Methods:
+        __len__(): Returns the length of the dataset.
+        __getitem__(): Returns the data point at the given index.
     """
 
     WIDTH = 398
@@ -75,7 +81,11 @@ class MultimodalSimulation(Dataset):
         self.offset = offset
 
     def __len__(self):
-        """Returns the number of samples in the dataset."""
+        """Returns the number of samples in the dataset.
+        
+        Returns:
+            int: Number of samples in the dataset.
+        """
         return self.num_samples
 
     def __getitem__(self, item):
@@ -91,6 +101,9 @@ class MultimodalSimulation(Dataset):
 
         Args:
             item (int): Index of the sample to return.
+
+        Returns:
+            tuple: Tuple containing the frames, the joints and the label.
         """
 
         dir_number = self.visible_objects
@@ -168,6 +181,16 @@ class MultimodalSimulation(Dataset):
         return frames, joints, label
 
     def get_image(self, frame_paths, joint_paths, index):
+        """Reads a frame and the corresponding joint from the disk.
+
+        Args:
+            frame_paths (list): List of paths to the frames.
+            joint_paths (list): List of paths to the joints.
+            index (int): Index of the frame and joint to read.
+
+        Returns:
+            tuple: Tuple containing the frame and the joint.
+        """
         frame_path = frame_paths[index]
         frame = read_image(frame_path).to(torch.float32) / 255
         if self.transform is not None:
@@ -179,9 +202,29 @@ class MultimodalSimulation(Dataset):
 
 
     def get_sentence_string(self, label):
+        """Converts a label to a string.
+        For debugging purposes.
+
+        Args:
+            label (torch.Tensor): Label to convert.
+
+        Returns:
+            str: String representation of the label.
+        """
         return f"{self.DICTIONARY[int(label[0])]} {self.DICTIONARY[int(label[1])]} {self.DICTIONARY[int(label[3])]}"
 
     def assert_output(self, frames, joints, label):
+        """Asserts the output of the dataset.
+        For debugging purposes.
+
+        Args:
+            frames (torch.Tensor): Frames of the sequence.
+            joints (torch.Tensor): Joints of the sequence.
+            label (torch.Tensor): Label of the sequence.
+
+        Raises:
+            AssertionError: If the output is not as expected.
+        """
         # frames.shape -> (frames, 3, 224, 398)
         # joints.shape -> (frames, 6)
         # label.shape  -> (3) : word tokens
@@ -204,6 +247,22 @@ class DataModule(LightningDataModule):
     Args:
         config (dict): configuration dictionary
         unsupervised (bool): use unsupervised learning
+
+    Attributes:
+        config (dict): configuration dictionary
+        unsupervised (bool): use unsupervised learning
+        transform (torchvision.transforms): normalization transform
+        train_loader (torch.utils.data.DataLoader): train dataloader
+        val_loaders (dict): validation dataloaders
+        test_loader (torch.utils.data.DataLoader): test dataloader
+
+    Methods:
+        prepare_data: prepare data
+        setup: setup train, val and test datasets
+        train_dataloader: get train dataloader
+        val_dataloader: get validation dataloader
+        test_dataloader: get test dataloader
+        create_dataset: helper function to create a MultimodalSimulation dataset
     """
     def __init__(self, config, unsupervised=False):
         super().__init__()
@@ -222,7 +281,11 @@ class DataModule(LightningDataModule):
         pass
 
     def setup(self, stage=None):
-        """ Setup the train, val and test datasets."""
+        """ Setup the train, val and test datasets.
+        
+        Args:
+            stage (str): stage to setup
+        """
         if self.unsupervised:
             # For unsupervised training we use the whole dataset
             train_datasets=[]
@@ -278,6 +341,16 @@ class DataModule(LightningDataModule):
         """ Create a dataset for a specific configuration.
         
         Just a wrapper for the MultimodalSimulation class, that uses some globally defined parameters.
+
+        Args:
+            visible_objects (int): number of visible objects
+            different_colors (int): number of different colors
+            different_objects (int): number of different objects
+            exclusive_colors (bool): use exclusive colors
+            part (str): part of the dataset to use
+
+        Returns:
+            dataset (torch.utils.data.Dataset): dataset
         """
         offset = 0
         if self.unsupervised:
@@ -321,14 +394,26 @@ class DataModule(LightningDataModule):
                                     offset=offset)
 
     def train_dataloader(self):
-        """ Return the train dataloader."""
+        """ Return the train dataloader.
+        
+        Returns:
+            train_loader (torch.utils.data.DataLoader): train dataloader
+        """
         return self.train_loader
 
     def val_dataloader(self):
-        """ Return the validation dataloader."""
+        """ Return the validation dataloader.
+
+        Returns:
+            val_loaders (list of torch.utils.data.DataLoader): validation dataloaders
+        """
         return self.val_loaders
     
     def test_dataloader(self):
-        """ Return the test dataloader."""
+        """ Return the test dataloader.
+
+        Returns:
+            test_loader (torch.utils.data.DataLoader): test dataloader
+        """
         return self.test_loader
 

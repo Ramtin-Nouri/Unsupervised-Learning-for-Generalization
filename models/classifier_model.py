@@ -19,8 +19,22 @@ class ClassificationLstmDecoder(LightningModule):
     The output is a sequence of labels.
 
     Args:
-        output_size (int): Number of classes to predict.
         config (dict): Dictionary containing the configuration of the model.
+
+    Attributes:
+        hidden_size (int): Number of hidden units of the LSTM.
+        num_layers (int): Number of layers of the LSTM.
+        sentence_length (int): Length of the output sequence.
+        label_size (int): Size of the label space.
+        use_resnet (bool): Whether to use a ResNet first.
+        flatten (nn.Flatten): Flatten layer.
+        lstm (nn.LSTM): LSTM layer.
+        linear (nn.Linear): Linear layer.
+        dropout (nn.Dropout): Dropout layer.
+
+    Methods:
+        forward(x, output_size=None): Forward pass of the decoder.
+        init_hidden(batch_size): Return zero vectors as initial hidden states.
     """
     def __init__(self, config):
         super().__init__()
@@ -100,6 +114,36 @@ class LstmClassifier(LightningModule):
     Args:
         config (dict): Dictionary containing the configuration parameters.
         encoder (LstmEncoder): Trained encoder part of the LstmAutoencoder model.
+
+    Attributes:
+        label_size (int): Size of the label space.
+        learning_rate (float): Learning rate.
+        sentence_length (int): Length of the output sequence.
+        multi_sentence (bool): Whether the model should predict multiple sentences.
+        dataset (str): Name of the dataset. 
+        width (int): Width of the input images.
+        height (int): Height of the input images.
+        use_mask (bool): Whether to use a mask.
+        use_augmentation (bool): Whether to use data augmentation.
+        augmentation (DataAugmentation): Data augmentation module.
+        encoder (LstmEncoder): Encoder part of the model.
+        decoder (LstmDecoder): Decoder part of the model.
+
+    Methods:
+        forward(x, mask, output_size): Forward pass of the model.
+        training_step(batch, batch_idx): Training step.
+        validation_step(batch, batch_idx): Validation step.
+        create_masks(): Create all possible masks.
+        configure_optimizers(): Configure the optimizer.
+        get_random_mask(batch_size, multi_sentence): Get a random mask.
+        loss(pred, target, mask): Calculate the loss.
+        training_epoch_end(outputs): Log training accuracy.
+        validation_epoch_end(outputs): Log validation accuracy.
+        calculate_accuracy(pred, target, train, gen): Calculate the accuracy.
+        action_color_object_accuracy(pred, target, train, gen): Calculate the accuracy for the action-color-object task.
+        action_color_material_object_accuracy(pred, target, train, gen): Calculate the accuracy for the action-color-material-object task.
+        reset_metrics_train(): Reset the training metrics.
+        reset_metrics_val(): Reset the validation metrics.
     """
     def __init__(self, config, encoder=None):
         super().__init__()
@@ -174,7 +218,8 @@ class LstmClassifier(LightningModule):
 
         Args:
             x_frames (torch.Tensor): Tensor containing the frames of the video. Shape: (batch_size, num_frames, 3, height, width) i.e. (batch_size, num_frames, 3, 224, 398)
-
+            mask (torch.Tensor): Tensor containing the masks. Shape: (batch_size, sentence_length) i.e. (batch_size, 3)
+            multi_sentence_length (int): Length of the output sequence for the multi-sentence task.
         Returns:
             torch.Tensor: Output of the model. Shape: (batch_size, sentence_length, label_size) i.e. (batch_size, 3, 19)
         """

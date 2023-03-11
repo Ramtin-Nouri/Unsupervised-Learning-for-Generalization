@@ -23,6 +23,12 @@ class LstmEncoder(LightningModule):
         conv_layers (nn.Sequential): Sequential model containing the convolutional layers.
         dense_layers (nn.Sequential): Sequential model containing the dense layers.
         lstm (nn.LSTM): LSTM model.
+        use_mask (bool): Whether to use a mask as input to the model.
+        use_resnet (bool): Whether to use a resnet as input to the model.
+
+    Methods:
+        forward(x, mask): Forward pass of the LSTM encoder.
+        init_hidden(batch_size): Return zero vectors as initial hidden states.
     """
 
     def __init__(self, config):
@@ -75,6 +81,13 @@ class LstmEncoder(LightningModule):
 
     def forward(self, x, mask=None):
         """Forward pass of the encoder.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, channels, height, width).
+            mask (torch.Tensor): Mask tensor of shape (batch_size, seq_len, height, width).
+
+        Returns:
+            list of torch.Tensor: List of hidden states of the LSTM.
         """
         h_t, c_t = self.init_hidden(x.shape[0])
         if self.use_joints:
@@ -128,6 +141,9 @@ class CnnDecoder(LightningModule):
         use_joints (bool): Whether to use joints or not.
         conv_layers (nn.Sequential): Convolutional layers.
         dense_layers (nn.Sequential): Dense layers.
+
+    Methods:
+        forward(x): Forward pass of the decoder.
     """
 
     def __init__(self, config):
@@ -174,13 +190,25 @@ class LstmAutoencoder(LightningModule):
     """LSTM autoencoder model.
 
     Args:
-        conv_features (list): List of convolutional features.
-        input_size (int): Size of the input image.
-        hidden_size (int): Size of the hidden state of the LSTM.
-        num_layers (int, optional): Number of layers in the LSTM. Defaults to 1.
+        config (dict): Dictionary containing the configuration of the model.
 
-    Returns:
-        torch.Tensor: Predicted image.
+    Attributes:
+        learning_rate (float): Learning rate.
+        loss (nn.MSELoss): Loss function.
+        use_joints (bool): Whether to use joints or not.
+        num_joints (int): Number of joints.
+        init_length (int): Number of frames to use to initialize the LSTM.
+        predict_ahead (int): Number of frames to predict ahead.
+        encoder (LstmEncoder): Encoder of the autoencoder.
+        decoder (CnnDecoder): Decoder of the autoencoder.
+
+    Methods:
+        forward(x): Forward pass of the autoencoder.
+        training_step(batch, batch_idx): Training step.
+        validation_step(batch, batch_idx): Validation step.
+        step(batch, batch_idx): Step, used for both training and validation.
+        configure_optimizers(): Configures the optimizer.
+        predict(x): Predicts the next frames.
     """
 
     def __init__(self, config):

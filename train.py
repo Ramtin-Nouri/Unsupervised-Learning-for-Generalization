@@ -41,6 +41,9 @@ def load_config(config_path, debug=False):
     Args:
         config_path (str): Path to the configuration JSON file.
         debug (bool): If True, the number of samples is reduced.
+
+    Returns:
+        dict: Configuration dictionary.
     """
     config_file = json.load(open(config_path, "r"))
     default = json.load(open("configs/default.json", "r"))
@@ -309,7 +312,19 @@ def train_supervised(config, wandb_logger, encoder=None):
     return best,supervised_datamodule
 
 def evaluate(config, wandb_logger, model, dataloader, name):
-    """Evaluate the model on the given dataloader."""
+    """Evaluate the model on the given dataloader.
+    Creates a confusion matrix and logs it to wandb.
+
+    Args:
+        config (dict): Configuration dictionary.
+        wandb_logger (WandbLogger): WandB logger.
+        model (LstmClassifier): Trained model.
+        dataloader (DataLoader): Dataloader to evaluate on.
+        name (str): Name of the dataloader.
+
+    Returns:
+        float: The sentence-wise accuracy.
+    """
     # ugly compatibility stuff
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # TODO: avoid passing device, use pytorch lightning
     model.to(device)
@@ -393,6 +408,11 @@ def test_supervised(config, wandb_logger, model, datamodule):
 
 
 def main(args):
+    """Main function.
+
+    Args:
+        args (argparse.Namespace): Arguments.
+    """
     pl.seed_everything(42, workers=True) # for reproducibility
     config = load_config(args.config, args.debug)
     config["debug"] = args.debug # for the wandb logger

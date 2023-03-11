@@ -6,6 +6,37 @@ from pytorch_lightning import LightningDataModule
 from torchvision import transforms
 
 class ArcGenDataset(Dataset):
+    """ ArcGen dataset.
+    Pytorch Dataset class for ARC-GEN dataset. ARC-GEN dataset is a variation of the CATER dataset.
+    It is a dataset of videos of synthetic scenes with a single object moving around.
+    The dataset is split into 4 parts: train, val, test and test_val.
+    The train and val sets are used for training and validation.
+    The test set is used for testing the model on unseen combinations of actions, colors, material and objects.
+    The test_val set is used for validating the model on unseen combinations of actions, colors, material and objects.
+
+    Args:
+        config (dict): Configuration dictionary.
+        mode (str, optional): Mode of the dataset. Can be 'train', 'val', 'test' or 'test_val'. Defaults to 'train'.
+        transform (torchvision.transforms, optional): Transformations to apply to the images. Defaults to None.
+
+    Attributes:
+        config (dict): Configuration dictionary.
+        stride (int): Stride of the input images.
+        mode (str): Mode of the dataset. Can be 'train', 'val', 'test' or 'test_val'.
+        data_path (str): Path to the dataset.
+        transform (torchvision.transforms): Transformations to apply to the images.
+        SPLITDATASET (bool): Whether to split each video into 3 parts. Defaults to True.
+        train_data (list): List of training videos.
+        val_data (list): List of validation videos.
+        test_data (list): List of test videos.
+        test_val_data (list): List of test_val videos.
+
+    Methods:
+        load_data(): Loads the data (videos and labels) from the dataset.
+        __len__(): Returns the length of the dataset.
+        __getitem__(): Returns the data point at the given index.
+        load_video(): Loads the video at the given path.
+    """
     def __init__(self, config, mode='train', transform=None):
         self.config = config
         self.stride = config['input_stride']
@@ -17,6 +48,14 @@ class ArcGenDataset(Dataset):
         self.train_data, self.val_data, self.test_data, self.test_val_data = self.load_data()
 
     def load_data(self):
+        """ Loads the data (videos and labels) from the dataset.
+
+        Returns:
+            train_data (list): List of training videos.
+            val_data (list): List of validation videos.
+            test_data (list): List of test videos.
+            test_val_data (list): List of test_val videos.
+        """
         train_data = []
         val_data = []
         test_data = []
@@ -41,6 +80,11 @@ class ArcGenDataset(Dataset):
         return train_data, val_data, test_data, test_val_data
 
     def __len__(self):
+        """ Returns the length of the dataset.
+
+        Returns:
+            l (int): Length of the dataset.
+        """
         if self.config['debug']:
             l = 10
         elif self.mode == 'train':
@@ -57,6 +101,15 @@ class ArcGenDataset(Dataset):
         return l
 
     def __getitem__(self, idx):
+        """ Returns the data point at the given index.
+
+        Args:
+            idx (int): Index of the data point.
+
+        Returns:
+            frames (torch.Tensor): Tensor of shape (3, 224, 224, 30) containing the input images.
+            label (torch.Tensor): Tensor of shape (sentence_length) containing the labels.
+        """
         if self.SPLITDATASET:
             new_idx = idx // 3
         else:
@@ -84,6 +137,20 @@ class ArcGenDataset(Dataset):
         return frames, label
 
     def load_video(self, video_path, idx):
+        """ Loads the video at the given path.
+        Uses OpenCV to read the video and returns a tensor of shape (sequence_length, channels, height, width).
+        Does not use torchvision's VideoReader because it does not work!?
+        Does not use hardware acceleration as of now.
+
+        Use input_stride to control the number of frames to skip.
+        if SPLITDATASET is True, it will skip frames until it reaches the correct index of the split video.
+
+        Args:
+            video_path (str): Path to the video.
+
+        Returns:
+            frames (torch.Tensor): Tensor of shape (sequence_length, channels, height, width) containing the input images.
+        """
         cap = cv2.VideoCapture(video_path)
         assert cap.isOpened(), f'Cannot capture source {video_path}'
         frames = []
@@ -106,8 +173,8 @@ class ArcGenDataset(Dataset):
         #print(len(frames))
         # TODO: cap to fix length + pad preceding zeros
 
-        frames = torch.stack(frames)
-        frames = frames.permute(0, 3, 1, 2)
+        frames = torch.stack(frames) # (sequence_length, height, width, channels)
+        frames = frames.permute(0, 3, 1, 2) # (sequence_length, channels, height, width)
         frames = frames.float() / 255.0
         if self.transform is not None:
             frames = self.transform(frames)
@@ -116,6 +183,25 @@ class ArcGenDataset(Dataset):
         return frames
 
 class DataModule(LightningDataModule):
+    """ DataModule for the ArcGen dataset.
+
+    Args:
+        config (dict): Configuration dictionary.
+
+    Attributes:
+        config (dict): Configuration dictionary.
+        transform (torchvision.transforms.Normalize): Normalization transform.
+        train_dataset (ArcGenDataset): Training dataset.
+        val_dataset (ArcGenDataset): Validation dataset.
+        test_dataset (ArcGenDataset): Test dataset.
+        test_val_dataset (ArcGenDataset): Test dataset for validation.
+
+    Methods:
+        setup: Sets up the datasets.
+        train_dataloader: Returns the training dataloader.
+        val_dataloader: Returns both the validation and test-validation dataloaders.
+        test_dataloader: Returns the test dataloader.
+    """
     def __init__(self, config):
         super().__init__()
         self.config = config

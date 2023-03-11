@@ -67,6 +67,7 @@ def get_evaluation(model, data_loader, device, config, description=""):
         model (torch.nn.Module): The model to evaluate.
         data_loader (torch.utils.data.DataLoader): The data loader to evaluate on.
         device (torch.device): The device to use.
+        config (dict): The configuration.
         description (str): The description of what is evaluated.
 
     Returns:
