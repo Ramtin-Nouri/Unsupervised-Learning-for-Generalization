@@ -135,17 +135,19 @@ class ArcGenDataset(Dataset):
             # First clean the label from any _containing (1) actions
             cleaned_label = []
             for i in range(len(label)//self.config["sentence_length"]):
-                if label[i*self.config["sentence_length"]] != 1:
+                if label[i*self.config["sentence_length"]] != 1: # if the first action is not _containing
                     cleaned_label += label[i*self.config["sentence_length"]:(i+1)*self.config["sentence_length"]]
 
             label = cleaned_label
             start_idx = (idx%3) * self.config["sentence_length"]
             end_idx = start_idx + self.config["sentence_length"]
             label = label[start_idx:end_idx]
+            """
             # For debugging:
             for i in range(len(label)):
                 assert label[i] != 1, f'Label should not contain any _containing (1) actions. Label: {label}'
                 assert label[i] != 0, f'Label should not contain any EOS (0) actions. Label: {label}'
+            """
         label = torch.tensor(label, dtype=torch.uint8)
 
         return frames, label
