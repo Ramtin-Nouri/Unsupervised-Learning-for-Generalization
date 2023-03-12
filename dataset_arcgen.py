@@ -97,7 +97,7 @@ class ArcGenDataset(Dataset):
             l = len(self.test_data)
 
         if self.SPLITDATASET:
-            l = l * 3
+            l = l * 3 # split each video into 3 parts
         return l
 
     def __getitem__(self, idx):
@@ -114,6 +114,7 @@ class ArcGenDataset(Dataset):
             new_idx = idx // 3
         else:
             new_idx = idx
+
         if self.mode == 'train':
             data_point = self.train_data[new_idx]
         elif self.mode == 'val':
@@ -126,12 +127,25 @@ class ArcGenDataset(Dataset):
         video_path = data_point.split(':')[0]
         video_path = os.path.join(self.data_path, 'images', video_path)
 
-        frames = self.load_video(video_path, 30*idx%3)
+        frames = self.load_video(video_path, idx%3)
 
         label = data_point.split(':')[1].split(',')
         label = [int(x) for x in label]
         if self.SPLITDATASET:
-            label = label[idx%3:idx%3+self.config["sentence_length"]]
+            # First clean the label from any _containing (1) actions
+            cleaned_label = []
+            for i in range(len(label)//self.config["sentence_length"]):
+                if label[i*self.config["sentence_length"]] != 1:
+                    cleaned_label += label[i*self.config["sentence_length"]:(i+1)*self.config["sentence_length"]]
+
+            label = cleaned_label
+            start_idx = (idx%3) * self.config["sentence_length"]
+            end_idx = start_idx + self.config["sentence_length"]
+            label = label[start_idx:end_idx]
+            # For debugging:
+            for i in range(len(label)):
+                assert label[i] != 1, f'Label should not contain any _containing (1) actions. Label: {label}'
+                assert label[i] != 0, f'Label should not contain any EOS (0) actions. Label: {label}'
         label = torch.tensor(label, dtype=torch.uint8)
 
         return frames, label
@@ -155,13 +169,16 @@ class ArcGenDataset(Dataset):
         assert cap.isOpened(), f'Cannot capture source {video_path}'
         frames = []
         i = 0
-        while True:
+        if self.SPLITDATASET:
+            for _ in range(idx*30):
+                ret, frame = cap.read()
+                if not ret:
+                    raise Exception("Error reading video")
+            
+        for _ in range(30):
             ret, frame = cap.read()
             if not ret:
                 break
-            if self.SPLITDATASET and i < idx:
-                i += 1
-                continue
             if i % self.stride != 0:
                 i += 1
                 continue
