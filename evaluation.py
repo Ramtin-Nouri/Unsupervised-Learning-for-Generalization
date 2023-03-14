@@ -141,6 +141,10 @@ def get_evaluation(model, data_loader, device, config, description=""):
             _, action_outputs = torch.max(outputs[:, 0, :], dim=1)
             _, color_outputs = torch.max(outputs[:, 1, :], dim=1)
             _, object_outputs = torch.max(outputs[:, 2, :], dim=1)
+            if config["sentence_length"] == 4:
+                _, material_outputs = torch.max(outputs[:, 3, :], dim=1) # actually its action, material, color, object, but we dont care about the order
+            else: 
+                material_correct = True
 
             for n in range(outputs.shape[0]):
                 confusion_matrix[int(labels[n, 0].item()), (action_outputs[n].item())] += 1
@@ -151,7 +155,11 @@ def get_evaluation(model, data_loader, device, config, description=""):
                 color_correct = torch.sum(color_outputs[n] == labels[n, 1])
                 object_correct = torch.sum(object_outputs[n] == labels[n, 2])
 
-                if action_correct and color_correct and object_correct:
+                if config["sentence_length"] == 4:
+                    confusion_matrix[int(labels[n, 3].item()), (material_outputs[n].item())] += 1
+                    material_correct = torch.sum(material_outputs[n] == labels[n, 3])
+
+                if action_correct and color_correct and object_correct and material_correct:
                     correct_sentences += 1
 
     sentence_wise_accuracy = correct_sentences * 100 / len(data_loader.dataset)
