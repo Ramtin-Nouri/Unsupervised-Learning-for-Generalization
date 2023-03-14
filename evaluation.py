@@ -102,7 +102,6 @@ def get_evaluation(model, data_loader, device, config, description=""):
             outputs.append(output_batch) # (data_size, N, L, D)
             labels.append(label_batch) # (data_size, N, L)
 
-
         if config["multi_sentence"]:
             for l in range(len(outputs)):
                 # outputs[l] is (N, L, D) aka 1 sentence
@@ -137,8 +136,8 @@ def get_evaluation(model, data_loader, device, config, description=""):
                     if all_sentence_correct:
                         correct_sentences += 1
         else:
-            outputs = torch.cat(outputs, dim=1) 
-            labels = torch.cat(labels, dim=1)
+            outputs = torch.cat(outputs, dim=0) 
+            labels = torch.cat(labels, dim=0)
             _, action_outputs = torch.max(outputs[:, 0, :], dim=1)
             _, color_outputs = torch.max(outputs[:, 1, :], dim=1)
             _, object_outputs = torch.max(outputs[:, 2, :], dim=1)
