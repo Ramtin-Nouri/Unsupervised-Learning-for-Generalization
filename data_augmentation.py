@@ -17,7 +17,7 @@ class DataAugmentation():
         _log_api_usage_once(self)
         
 
-    def __call__(self, batch, augment_action, augment_color, augment_object):
+    def __call__(self, batch, augment_action, augment_color, augment_object, augment_material):
         """ Applies the data augmentation transformations to a batch of images.
 
         Args:
@@ -27,6 +27,7 @@ class DataAugmentation():
             torch.Tensor: Batch of transformed image sequences. Shape: (B, T, C, H, W)
         """
         # apply transformations
+        # TODO: add material augmentation
         compose = self.create_compose(augment_action, augment_color, augment_object)
         for i in range(batch.size(0)):
             batch[i] = compose(batch[i])

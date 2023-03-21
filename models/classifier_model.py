@@ -296,8 +296,13 @@ class LstmClassifier(LightningModule):
         if self.use_augmentation:
             augment_action = not mask[0][0]
             augment_color = not mask[0][1]
-            augment_object = not mask[0][2]
-            frames = self.augmentation(frames, augment_action, augment_color, augment_object)
+            if self.sentence_length == 3:
+                augment_object = not mask[0][2]
+                frames = self.augmentation(frames, augment_action, augment_color, augment_object)
+            else:
+                augment_material = not mask[0][2]
+                augment_object = not mask[0][3]
+                frames = self.augmentation(frames, augment_action, augment_color, augment_object, augment_material)
 
         if self.multi_sentence:
             output = self(frames, mask, multi_sentence_length=labels.shape[1])
