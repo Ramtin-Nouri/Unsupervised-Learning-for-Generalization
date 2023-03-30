@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from datetime import datetime
 import json
 import os
-import dataset_multimodal, dataset_arcgen
+import dataset_multimodal, dataset_arcgen, dataset_cater
 from models.classifier_model import LstmClassifier
 from models.lstm_autoencoder import LstmAutoencoder
 from helper import *
@@ -191,7 +191,7 @@ def train_unsupervised(config, wandb_logger):
     if config["dataset_name"] == "Multimodal":
         unsupervised_datamodule = dataset_multimodal.DataModule(config, True)
     else:
-        raise NotImplementedError("ARC-Gen unsupervised not implemented, yet.")
+        unsupervised_datamodule = dataset_cater.CaterModule(config)
     unsupervised_model = LstmAutoencoder(config)
     print("Unsupervised model:", unsupervised_model)
     if wandb_logger is not None:
