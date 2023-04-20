@@ -143,8 +143,14 @@ def predict_train_val_images(datamodule, model, logger, config):
         config (dict): The config to use.
     """
     with torch.no_grad():
-        dataset_mean = [0.7605, 0.7042, 0.6045]
-        dataset_std = [0.1832, 0.2083, 0.2902]
+        if config["dataset_name"] == "ARC-GEN":
+            dataset_mean = torch.tensor([0.4569, 0.4648, 0.4688])
+            dataset_std = torch.tensor([0.0166, 0.0153, 0.0153])
+        elif config["dataset_name"] == "Multimodal":
+            dataset_mean = [0.7605, 0.7042, 0.6045]
+            dataset_std = [0.1832, 0.2083, 0.2902]
+        else:
+            raise ValueError("Unknown dataset name: {}".format(config["dataset_name"]))
         unnormalize = transforms.Normalize(
             mean=[-m / s for m, s in zip(dataset_mean, dataset_std)],
             std=[1 / s for s in dataset_std],
