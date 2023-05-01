@@ -1,10 +1,19 @@
 # Unsupervised-Learning-for-Generalization
-Repo of Master thesis Unsupervised Learning for Out-of-Distribution Generalization on a Multimodal Sequence Dataset.  
-Train an action recognition model on Volquardsen et al.'s dataset or on Action Recogntion for Compositional-Generaliuation (ARC-GEN), a variation of the CATER dataset.  
+Repo of Master thesis "Improving Compositional Generalization
+By Learning Concepts Individually".  
+Train an action recognition model on Volquardsen et al.'s dataset or on Action Recogntion for Compositional Generalization (ArCoGen), a variation of the CATER dataset.  
 Inputs are image sequences and outputs are natural language sentences of the action using a fixed dictionary.
 
 # Abstract
-**TODO**
+Neural Networks are powerful function approximators, but often fail to generalize beyond their dataset. In this work, we investigate models and techniques for improved out-of-distribution generalization in the context of action recognition tasks. In particular, we focus on compositional generalization, where the data and target labels are compositionally composed of multiple properties.
+
+To improve compositional generalization, we propose two novel approaches, that use a ConvLSTM-based model. The first approach involves unsupervised pre-training on an extended dataset using next frame prediction. We hypothesize, that this method allows the model to learn a more general representation of the data.
+
+Our second approach introduces a new mask, that ignores certain words in the target label. This mask is given to the model as second input, allowing the model to focus on individual properties.
+
+We evaluated the performance of both approaches on Volquardsen et al.'s dataset, and our newly introduced \AG{} dataset. The results of both approaches significantly outperform the baseline on Volquardsen et al.'s dataset on compositional generalization. While the baseline fails completely in the hardest configuration, achieving 0\% compositional generalization accuracy, our masking approach could achieve 74.6\%.
+However, the accuracies on our proposed \AG{} dataset were not as strong. While the results of the masking approach were reasonable, giving the more complex dataset, the unsupervised pre-training approach performed poorly and requires further work.
+ These findings may pave the way for more effective and generalizable action recognition systems in real-world applications.
 
 # Usage
 ## Prerequisites
@@ -17,7 +26,6 @@ Inputs are image sequences and outputs are natural language sentences of the act
 
 See ``requirements.txt`` for complete list of dependencies.
 I wouldn't recommend using the ``requirements.txt`` file directly, as it might have some redundant dependencies. Instead, install the dependencies manually.
-**TODO: create correct requirements.txt**
 
 Note: To use the ``wandb`` module, you need to have a WandB account and have the ``WANDB_API_KEY`` environment variable set to your API key. See https://docs.wandb.ai/quickstart for more information. Also make sure to set the ``project`` and ``username`` variable in the config file to your project name.
 
