@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from datetime import datetime
 import json
 import os
-import dataset
+import dataset_multimodal, dataset_arcgen, dataset_cater
 from models.classifier_model import LstmClassifier
 from models.lstm_autoencoder import LstmAutoencoder
 from helper import *
@@ -41,6 +41,9 @@ def load_config(config_path, debug=False):
     Args:
         config_path (str): Path to the configuration JSON file.
         debug (bool): If True, the number of samples is reduced.
+
+    Returns:
+        dict: Configuration dictionary.
     """
     config_file = json.load(open(config_path, "r"))
     default = json.load(open("configs/default.json", "r"))
@@ -70,9 +73,11 @@ def load_config(config_path, debug=False):
     config["dropout_autoencoder"] = model.get("dropout_autoencoder", default["model"]["dropout_autoencoder"])
     config["dropout_classifier"] = model.get("dropout_classifier", default["model"]["dropout_classifier"])
     config["use_resnet"] = model.get("use_resnet", default["model"]["use_resnet"])
+    config["use_mask"] = model.get("use_mask", default["model"]["use_mask"])
 
     # dataset related configs
     dataset = config_file.get("dataset", default["dataset"])
+    config["dataset_name"] = dataset.get("dataset_name", default["dataset"]["dataset_name"]) # Multimodal or ARC-GEN
     config["width"] = dataset.get("width", default["dataset"]["width"])
     config["height"] = dataset.get("height", default["dataset"]["height"])
     config["data_path"] = dataset.get("data_path", default["dataset"]["data_path"])
@@ -88,6 +93,7 @@ def load_config(config_path, debug=False):
     config["num_joints"] = dataset.get("num_joints", default["dataset"]["num_joints"])
     config["sentence_length"] = dataset.get("sentence_length", default["dataset"]["sentence_length"])
     config["dictionary_size"] = dataset.get("dictionary_size", default["dataset"]["dictionary_size"])
+    config["multi_sentence"] = dataset.get("multi_sentence", default["dataset"]["multi_sentence"])
 
     if debug:
         config["num_training_samples"] = 10
@@ -137,8 +143,14 @@ def predict_train_val_images(datamodule, model, logger, config):
         config (dict): The config to use.
     """
     with torch.no_grad():
-        dataset_mean = [0.7605, 0.7042, 0.6045]
-        dataset_std = [0.1832, 0.2083, 0.2902]
+        if config["dataset_name"] == "ARC-GEN":
+            dataset_mean = torch.tensor([0.4569, 0.4648, 0.4688])
+            dataset_std = torch.tensor([0.0166, 0.0153, 0.0153])
+        elif config["dataset_name"] == "Multimodal":
+            dataset_mean = [0.7605, 0.7042, 0.6045]
+            dataset_std = [0.1832, 0.2083, 0.2902]
+        else:
+            raise ValueError("Unknown dataset name: {}".format(config["dataset_name"]))
         unnormalize = transforms.Normalize(
             mean=[-m / s for m, s in zip(dataset_mean, dataset_std)],
             std=[1 / s for s in dataset_std],
@@ -182,7 +194,10 @@ def train_unsupervised(config, wandb_logger):
     Returns:
         LstmAutoencoder: Trained unsupervised model.
     """
-    unsupervised_datamodule = dataset.DataModule(config, True)
+    if config["dataset_name"] == "Multimodal":
+        unsupervised_datamodule = dataset_multimodal.DataModule(config, True)
+    else:
+        unsupervised_datamodule = dataset_cater.CaterModule(config)
     unsupervised_model = LstmAutoencoder(config)
     print("Unsupervised model:", unsupervised_model)
     if wandb_logger is not None:
@@ -265,7 +280,10 @@ def train_supervised(config, wandb_logger, encoder=None):
         LstmAutoencoder: Trained supervised model.
         datamodule (DataModule): Supervised datamodule.
     """
-    supervised_datamodule = dataset.DataModule(config, False)
+    if config["dataset_name"] == "Multimodal":
+        supervised_datamodule = dataset_multimodal.DataModule(config, False)
+    else:
+        supervised_datamodule = dataset_arcgen.DataModule(config)
     supervised_model = LstmClassifier(config, encoder)
     print("Supervised model:", supervised_model)
     if wandb_logger is not None:
@@ -299,6 +317,71 @@ def train_supervised(config, wandb_logger, encoder=None):
     best = load_model(supervised_checkpt.best_model_path, is_unsupervised=False, encoder=encoder)
     return best,supervised_datamodule
 
+def evaluate(config, wandb_logger, model, dataloader, name):
+    """Evaluate the model on the given dataloader.
+    Creates a confusion matrix and logs it to wandb.
+
+    Args:
+        config (dict): Configuration dictionary.
+        wandb_logger (WandbLogger): WandB logger.
+        model (LstmClassifier): Trained model.
+        dataloader (DataLoader): Dataloader to evaluate on.
+        name (str): Name of the dataloader.
+
+    Returns:
+        float: The sentence-wise accuracy.
+    """
+    # ugly compatibility stuff
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # TODO: avoid passing device, use pytorch lightning
+    model.to(device)
+    if config["dataset_name"] == "Multimodal":
+        dictionary = ["put down", "picked up", "pushed left", "pushed right",
+                  "apple", "banana", "cup", "football", "book", "pylon", "bottle", "star", "ring",
+                  "red", "green", "blue", "yellow", "white", "brown"]
+    else:
+        dictionary = ['EOS', '_containing', '_contain', '_pick_place', '_rotate', '_slide',
+              'metal', 'rubber',
+              'yellow', 'cyan', 'gold', 'brown', 'red', 'gray', 'purple', 'blue', 'green',
+              'sphere', 'cube', 'cylinder', 'cone', 'spl']
+
+    confusion_matrix_absolute, sentence_wise_accuracy = get_evaluation(
+        model,
+        dataloader,
+        device,
+        config,
+        name)
+
+    plt = create_confusion_matrix_plt(confusion_matrix_absolute, f"{name}-absolute-{config['run_name']}", False, dictionary)
+    if wandb_logger is not None:
+        wandb_logger.log_image(key=f"{name}-absolute", images=[plt])
+    plt.close
+
+    confusion_matrix_relative = get_relative_confusion_matrix(confusion_matrix_absolute)
+    plt = create_confusion_matrix_plt(confusion_matrix_relative, f"{name}-relative-{config['run_name']}", True, dictionary)
+    if wandb_logger is not None:
+        wandb_logger.log_image(key=f"{name}-relative", images=[plt])
+    plt.close
+    
+    accuracy = np.trace(confusion_matrix_absolute) * 100 / np.sum(confusion_matrix_absolute)
+    if config["dataset_name"] == "Multimodal":
+        action_accuracy = np.trace(confusion_matrix_absolute[:4, :4]) * 100 / np.sum(confusion_matrix_absolute[:4, :4])
+        color_accuracy = np.trace(confusion_matrix_absolute[13:19, 13:19]) * 100 / np.sum(confusion_matrix_absolute[13:19, 13:19])
+        object_accuracy = np.trace(confusion_matrix_absolute[4:13, 4:13]) * 100 / np.sum(confusion_matrix_absolute[4:13, 4:13])
+    else:
+        action_accuracy  = np.trace(confusion_matrix_absolute[1:6, 1:6]) * 100 / np.sum(confusion_matrix_absolute[1:6, 1:6])
+        material_accuracy = np.trace(confusion_matrix_absolute[6:8, 6:8]) * 100 / np.sum(confusion_matrix_absolute[6:8, 6:8])
+        color_accuracy   = np.trace(confusion_matrix_absolute[8:17, 8:17]) * 100 / np.sum(confusion_matrix_absolute[8:17, 8:17])
+        object_accuracy   = np.trace(confusion_matrix_absolute[17:22, 17:22]) * 100 / np.sum(confusion_matrix_absolute[17:22, 17:22])
+        if wandb_logger is not None:
+            wandb_logger.log_metrics({f"{name}_material_accuracy": material_accuracy})
+    if wandb_logger is not None:
+        wandb_logger.log_metrics({f"{name}_sentence_wise_accuracy": sentence_wise_accuracy,
+                f"{name}_accuracy": accuracy,
+                f"{name}_action_accuracy": action_accuracy,
+                f"{name}_color_accuracy": color_accuracy,
+                f"{name}_object_accuracy": object_accuracy})
+    return sentence_wise_accuracy
+
 
 def test_supervised(config, wandb_logger, model, datamodule):
     """Test the supervised model.
@@ -309,155 +392,33 @@ def test_supervised(config, wandb_logger, model, datamodule):
         model (LstmClassifier): Trained supervised model.
         datamodule (DataModule): DataModule.
     """
-    # ugly compatibility stuff
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # TODO: avoid passing device, use pytorch lightning
-    model.to(device)
-
-    train_confusion_matrix_absolute, final_train_wrong_predictions, final_train_sentence_wise_accuracy = get_evaluation(
-        model, datamodule.train_dataloader(),
-        device,
-        f"Final training")
-    val_confusion_matrix_absolute, final_val_wrong_predictions, final_val_sentence_wise_accuracy = get_evaluation(
-        model,
-        datamodule.val_dataloader()[0],
-        device,
-        f"Final validation")
-
-    train_confusion_matrix_relative = get_relative_confusion_matrix(train_confusion_matrix_absolute)
-    val_confusion_matrix_relative = get_relative_confusion_matrix(val_confusion_matrix_absolute)
-
-    plt = create_confusion_matrix_plt(train_confusion_matrix_absolute, f"Final-training-absolute-{config['run_name']}", False)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key="Final-training-absolute", images=[plt])
-    plt.close()
-
-    plt = create_confusion_matrix_plt(train_confusion_matrix_relative, f"Final-training-relative-{config['run_name']}", True)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key="Final-training-relative", images=[plt])
-    plt.close()
-
-    plt = create_confusion_matrix_plt(val_confusion_matrix_absolute, f"Final-validation-absolute-{config['run_name']}", False)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key="Final-validation-absolute", images=[plt])
-    plt.close()
-
-    plt = create_confusion_matrix_plt(val_confusion_matrix_relative, f"Final-validation-relative-{config['run_name']}", True)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key="Final-validation-relative", images=[plt])
-    plt.close()
-
-    final_train_accuracy = np.trace(train_confusion_matrix_absolute) * 100 / np.sum(train_confusion_matrix_absolute)
-    final_train_action_accuracy = np.trace(train_confusion_matrix_absolute[:4, :4]) * 100 / np.sum(
-        train_confusion_matrix_absolute[:4, :4])
-    final_train_color_accuracy = np.trace(train_confusion_matrix_absolute[13:19, 13:19]) * 100 / np.sum(
-        train_confusion_matrix_absolute[13:19, 13:19])
-    final_train_object_accuracy = np.trace(train_confusion_matrix_absolute[4:13, 4:13]) * 100 / np.sum(
-        train_confusion_matrix_absolute[4:13, 4:13])
-
-    final_val_accuracy = np.trace(val_confusion_matrix_absolute) * 100 / np.sum(val_confusion_matrix_absolute)
-    final_val_action_accuracy = np.trace(val_confusion_matrix_absolute[:4, :4]) * 100 / np.sum(
-        val_confusion_matrix_absolute[:4, :4])
-    final_val_color_accuracy = np.trace(val_confusion_matrix_absolute[13:19, 13:19]) * 100 / np.sum(
-        val_confusion_matrix_absolute[13:19, 13:19])
-    final_val_object_accuracy = np.trace(val_confusion_matrix_absolute[4:13, 4:13]) * 100 / np.sum(
-        val_confusion_matrix_absolute[4:13, 4:13])
-
-    if wandb_logger is not None:
-        wandb_logger.log_metrics({f"Final_training_sentence_wise_accuracy": final_train_sentence_wise_accuracy,
-                f"Final_training_accuracy": final_train_accuracy,
-                f"Final_training_action_accuracy": final_train_action_accuracy,
-                f"Final_training_color_accuracy": final_train_color_accuracy,
-                f"Final_training_object_accuracy": final_train_object_accuracy,
-
-                f"Final_validation_sentence_wise_accuracy": final_val_sentence_wise_accuracy,
-                f"Final_validation_accuracy": final_val_accuracy,
-                f"Final_validation_action_accuracy": final_val_action_accuracy,
-                f"Final_validation_color_accuracy": final_val_color_accuracy,
-                f"Final_validation_object_accuracy": final_val_object_accuracy,
-
-                f"Final_training_wrong_predictions": final_train_wrong_predictions,
-                f"Final_validation_wrong_predictions": final_val_wrong_predictions})
-
-    cf_matrices_absolute = np.zeros((6, 19, 19))
-    cf_matrices_absolute_gen = np.zeros((6, 19, 19))
+    evaluate(config, wandb_logger, model, datamodule.train_dataloader(), "Final-training")
+    evaluate(config, wandb_logger, model, datamodule.val_dataloader()[0], "Final-validation")
 
     i = config["visible_objects"]
-    test_data = datamodule.create_dataset(i, 0, 0, False, "constant-test")
-    gen_test_data = datamodule.create_dataset(i, 0, 0, False, "generalization-test")
-
-        # dataloader
-    test_loader = DataLoader(dataset=test_data, batch_size=config["batch_size"], shuffle=False,
-                                num_workers=config["num_workers"])
-    gen_test_loader = DataLoader(dataset=gen_test_data, batch_size=config["batch_size"], shuffle=False,
+    if config["dataset_name"] == "Multimodal":
+        test_data = datamodule.create_dataset(i, 0, 0, False, "constant-test")
+        test_loader = DataLoader(dataset=test_data, batch_size=config["batch_size"], shuffle=False,
                                     num_workers=config["num_workers"])
+        sentence_wise_accuracy = evaluate(config, wandb_logger, model, test_loader, f"V{i}-test")
+        print_with_time(f"Test accuracy: {np.mean(sentence_wise_accuracy):8.4f}%")
 
-    confusion_matrix_absolute, wrong_predictions, sentence_wise_accuracy = get_evaluation(model, test_loader, device, f"V{i} test")
-    confusion_matrix_absolute_gen, wrong_predictions_gen, sentence_wise_accuracy_gen = get_evaluation(model, gen_test_loader, device, f"V{i} generalization test")
-
-    confusion_matrix_relative = get_relative_confusion_matrix(confusion_matrix_absolute)
-    confusion_matrix_relative_gen = get_relative_confusion_matrix(confusion_matrix_absolute_gen)
-
-    plt = create_confusion_matrix_plt(confusion_matrix_absolute,
-                                        f"V{i}-test-absolute-{config['run_name']}", False)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key=f"V{i}-test-absolute", images=[plt])
-    plt.close()
-
-    plt = create_confusion_matrix_plt(confusion_matrix_relative,
-                                        f"V{i}-test-relative-{config['run_name']}", True)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key=f"V{i}-test-relative", images=[plt])
-    plt.close()
-
-    plt = create_confusion_matrix_plt(confusion_matrix_absolute_gen,
-                                        f"V{i}-generalization-test-absolute-{config['run_name']}", False)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key=f"V{i}-generalization-test-absolute", images=[plt])
-    plt.close()
-
-    plt = create_confusion_matrix_plt(confusion_matrix_relative_gen,
-                                        f"V{i}-generalization-test-relative-{config['run_name']}", True)
-    if wandb_logger is not None:
-        wandb_logger.log_image(key=f"V{i}-generalization-test-relative", images=[plt])
-    plt.close()
-
-    test_accuracy = np.trace(confusion_matrix_absolute) * 100 / np.sum(confusion_matrix_absolute)
-    test_action_accuracy = np.trace(confusion_matrix_absolute[:4, :4]) * 100 / np.sum(
-        confusion_matrix_absolute[:4, :4])
-    test_color_accuracy = np.trace(confusion_matrix_absolute[13:19, 13:19]) * 100 / np.sum(
-        confusion_matrix_absolute[13:19, 13:19])
-    test_object_accuracy = np.trace(confusion_matrix_absolute[4:13, 4:13]) * 100 / np.sum(
-        confusion_matrix_absolute[4:13, 4:13])
-
-    gen_test_accuracy = np.trace(confusion_matrix_absolute_gen) * 100 / np.sum(confusion_matrix_absolute_gen)
-    gen_test_action_accuracy = np.trace(confusion_matrix_absolute_gen[:4, :4]) * 100 / np.sum(
-        confusion_matrix_absolute_gen[:4, :4])
-    gen_test_color_accuracy = np.trace(confusion_matrix_absolute_gen[13:19, 13:19]) * 100 / np.sum(
-        confusion_matrix_absolute_gen[13:19, 13:19])
-    gen_test_object_accuracy = np.trace(confusion_matrix_absolute_gen[4:13, 4:13]) * 100 / np.sum(
-        confusion_matrix_absolute_gen[4:13, 4:13])
-
-    cf_matrices_absolute[i - 1] = confusion_matrix_absolute
-    cf_matrices_absolute_gen[i - 1] = confusion_matrix_absolute_gen
-
-    if wandb_logger is not None:
-        wandb_logger.log_metrics({f"V{i}-test_sentence_wise_accuracy": sentence_wise_accuracy,
-                f"V{i}-test_accuracy": test_accuracy,
-                f"V{i}-test_action_accuracy": test_action_accuracy,
-                f"V{i}-test_color_accuracy": test_color_accuracy,
-                f"V{i}-test_object_accuracy": test_object_accuracy,
-                f"V{i}-generalization_test_sentence_wise_accuracy": sentence_wise_accuracy_gen,
-                f"V{i}-generalization_test_accuracy": gen_test_accuracy,
-                f"V{i}-generalization_test_action_accuracy": gen_test_action_accuracy,
-                f"V{i}-generalization_test_color_accuracy": gen_test_color_accuracy,
-                f"V{i}-generalization_test_object_accuracy": gen_test_object_accuracy,
-                f"V{i}-test_wrong_predictions": wrong_predictions,
-                f"V{i}-generalization_test_wrong_predictions": wrong_predictions_gen})
-    print_with_time(f"Test accuracy: {np.mean(sentence_wise_accuracy):8.4f}%")
+        gen_test_data = datamodule.create_dataset(i, 0, 0, False, "generalization-test")
+        gen_test_loader = DataLoader(dataset=gen_test_data, batch_size=config["batch_size"], shuffle=False,
+                                        num_workers=config["num_workers"])
+    else:
+        # no constant test
+        gen_test_loader = datamodule.test_dataloader()
+    sentence_wise_accuracy_gen = evaluate(config, wandb_logger, model, gen_test_loader, f"V{i}-generalization-test")
     print_with_time(f"Generalization test accuracy: {np.mean(sentence_wise_accuracy_gen):8.4f}%")
 
 
 def main(args):
+    """Main function.
+
+    Args:
+        args (argparse.Namespace): Arguments.
+    """
     pl.seed_everything(42, workers=True) # for reproducibility
     config = load_config(args.config, args.debug)
     config["debug"] = args.debug # for the wandb logger

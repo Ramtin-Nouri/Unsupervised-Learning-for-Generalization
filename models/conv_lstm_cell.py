@@ -20,6 +20,14 @@ class ConvLSTMCell(LightningModule):
     Attributes:
         conv (nn.Conv2d): Convolutional layer.
         hidden_dim (int): Number of channels of the hidden state.
+        input_dim (int): Number of channels of the input tensor.
+        kernel_size (tuple): Size of the convolutional kernel.
+        padding (tuple): Padding of the convolutional kernel.
+        bias (bool): Whether to use bias in the convolutional layers.
+
+    Methods:
+        forward(input_tensor, cur_state): Forward pass of the ConvLSTM cell.
+        init_hidden(batch_size, image_size): Return zero vectors as initial hidden states.
     """
 
     def __init__(self, input_dim, hidden_dim, kernel_size, bias):
@@ -44,6 +52,10 @@ class ConvLSTMCell(LightningModule):
         Args:
             input_tensor (torch.Tensor): Input tensor of shape (batch_size, seq_len, input_dim, height, width).
             cur_state (list): List containing the current hidden state and the current cell state.
+
+        Returns:
+            torch.Tensor: Hidden state of the ConvLSTM cell.
+            torch.Tensor: Cell state of the ConvLSTM cell.
         """
         h_cur, c_cur = cur_state
 

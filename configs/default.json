@@ -20,10 +20,12 @@
         "lstm_num_layers": 2,
         "lstm_hidden_size": 512,
         "dropout_classifier":0.1,
-        "use_resnet": false
+        "use_resnet": false,
+        "use_mask": true
     },
     "dataset":{
-        "data_path": "dataset/",
+        "data_path": "dataset_casper/",
+        "dataset_name": "Multimodal",
         "width": 398,
         "height": 224,
         "num_training_samples": 5000,
@@ -37,6 +39,7 @@
         "different_actions": 4,
         "num_joints": 6,
         "sentence_length": 3,
+        "multi_sentence": false,
         "dictionary_size": 19
     },
     "wandb":{

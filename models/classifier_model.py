@@ -19,8 +19,22 @@ class ClassificationLstmDecoder(LightningModule):
     The output is a sequence of labels.
 
     Args:
-        output_size (int): Number of classes to predict.
         config (dict): Dictionary containing the configuration of the model.
+
+    Attributes:
+        hidden_size (int): Number of hidden units of the LSTM.
+        num_layers (int): Number of layers of the LSTM.
+        sentence_length (int): Length of the output sequence.
+        label_size (int): Size of the label space.
+        use_resnet (bool): Whether to use a ResNet first.
+        flatten (nn.Flatten): Flatten layer.
+        lstm (nn.LSTM): LSTM layer.
+        linear (nn.Linear): Linear layer.
+        dropout (nn.Dropout): Dropout layer.
+
+    Methods:
+        forward(x, output_size=None): Forward pass of the decoder.
+        init_hidden(batch_size): Return zero vectors as initial hidden states.
     """
     def __init__(self, config):
         super().__init__()
@@ -47,7 +61,7 @@ class ClassificationLstmDecoder(LightningModule):
         if config["dropout_classifier"] > 0:
             self.dropout = nn.Dropout(p=config["dropout_classifier"])
 
-    def forward(self, x):
+    def forward(self, x, output_size=None):
         """ Forward pass of the decoder.
 
         Args:
@@ -64,8 +78,13 @@ class ClassificationLstmDecoder(LightningModule):
         if self.dropout is not None:
             x = self.dropout(x)
         x = x.unsqueeze(1)
-        pred = torch.zeros((x.shape[0], self.sentence_length, self.label_size), device=x.device) 
-        for i in range(self.sentence_length):
+        if output_size is not None:
+            pred = torch.zeros((x.shape[0], output_size, self.label_size), device=x.device)
+            range_ = range(output_size)
+        else:
+            pred = torch.zeros((x.shape[0], self.sentence_length, self.label_size), device=x.device) 
+            range_ = range(self.sentence_length)
+        for i in range_:
             lstm_out, hidden = self.lstm(x, hidden)
             linear_out = self.linear(lstm_out)
             pred[:, i, :] = linear_out.squeeze(1)
@@ -88,23 +107,59 @@ class ClassificationLstmDecoder(LightningModule):
                 torch.zeros((self.num_layers, batch_size, self.hidden_size), device=device))
 
 class LstmClassifier(LightningModule):
-    """ LSTM model for classification. 
+    """ LSTM model for classification.
+
+    Joints are not used in this model. 
 
     Args:
         config (dict): Dictionary containing the configuration parameters.
         encoder (LstmEncoder): Trained encoder part of the LstmAutoencoder model.
+
+    Attributes:
+        label_size (int): Size of the label space.
+        learning_rate (float): Learning rate.
+        sentence_length (int): Length of the output sequence.
+        multi_sentence (bool): Whether the model should predict multiple sentences.
+        dataset (str): Name of the dataset. 
+        width (int): Width of the input images.
+        height (int): Height of the input images.
+        use_mask (bool): Whether to use a mask.
+        use_augmentation (bool): Whether to use data augmentation.
+        augmentation (DataAugmentation): Data augmentation module.
+        encoder (LstmEncoder): Encoder part of the model.
+        decoder (LstmDecoder): Decoder part of the model.
+
+    Methods:
+        forward(x, mask, output_size): Forward pass of the model.
+        training_step(batch, batch_idx): Training step.
+        validation_step(batch, batch_idx): Validation step.
+        create_masks(): Create all possible masks.
+        configure_optimizers(): Configure the optimizer.
+        get_random_mask(batch_size, multi_sentence): Get a random mask.
+        loss(pred, target, mask): Calculate the loss.
+        training_epoch_end(outputs): Log training accuracy.
+        validation_epoch_end(outputs): Log validation accuracy.
+        calculate_accuracy(pred, target, train, gen): Calculate the accuracy.
+        action_color_object_accuracy(pred, target, train, gen): Calculate the accuracy for the action-color-object task.
+        action_color_material_object_accuracy(pred, target, train, gen): Calculate the accuracy for the action-color-material-object task.
+        reset_metrics_train(): Reset the training metrics.
+        reset_metrics_val(): Reset the validation metrics.
     """
     def __init__(self, config, encoder=None):
         super().__init__()
         self.save_hyperparameters()
 
+        #self.use_joints = config["use_joints"]
+        #self.num_joints = config["num_joints"]
+
         self.label_size = config["dictionary_size"]
-        self.use_joints = config["use_joints"]
         self.learning_rate = config["learning_rate"]
-        self.num_joints = config["num_joints"]
         self.sentence_length = config["sentence_length"]
+        self.multi_sentence = config["multi_sentence"]
+        self.dataset = config["dataset_name"]
         self.width = config["width"]
         self.height = config["height"]
+        self.use_mask = config["use_mask"]
         self.use_augmentation = config["data_augmentation"]
         if self.use_augmentation:
             self.augmentation = DataAugmentation()
@@ -116,7 +171,8 @@ class LstmClassifier(LightningModule):
             self.encoder.freeze()
             self.encoder.requires_grad = False # Freeze the encoder 
         self.decoder = ClassificationLstmDecoder(config)
-        self.create_masks()
+        if self.use_mask:
+            self.create_masks()
 
         self.loss_fn = nn.CrossEntropyLoss()
         self.reset_metrics_train()
@@ -136,36 +192,48 @@ class LstmClassifier(LightningModule):
             self.masks.append(mask)
         self.masks = torch.tensor(self.masks, device=self.device)
 
-    def get_random_mask(self, batch_size):
+        
+
+    def get_random_mask(self, batch_size, multi_sentence_length=0):
         """ Get a random mask from the list of all possible masks.
         
         Each mask is the same for all inputs in a batch.
         """
-        mask = self.masks[np.random.randint(len(self.masks))].repeat(batch_size, 1)
+        mask = self.masks[np.random.randint(len(self.masks))]
+        if self.multi_sentence:
+            # repeat mask for each sentence
+            mask = mask.repeat((multi_sentence_length//self.sentence_length))
+            # add 1 to the end of the mask to indicate the end of the sentence (EOS token)
+            mask = torch.cat((mask, torch.ones(1)), dim=0)
+        mask = mask.repeat(batch_size, 1)
         mask = mask.to(self.device) # don't know why this is necessary, but it is
         return mask
         
-    def forward(self, x_frames, mask, x_joints=None):
+    def forward(self, x_frames, mask=None, multi_sentence_length=0):
         """ Forward pass of the model.
+
+        Frames and masks are passed to the encoder.
+        Encoder outputs a tensor for each frame, but only its last output is used.
+        The last output is passed to the decoder.
 
         Args:
             x_frames (torch.Tensor): Tensor containing the frames of the video. Shape: (batch_size, num_frames, 3, height, width) i.e. (batch_size, num_frames, 3, 224, 398)
-            x_joints (torch.Tensor): Tensor containing the joints of the video. Shape: (batch_size, num_frames, num_joints) i.e. (batch_size, num_frames, 6)
-
+            mask (torch.Tensor): Tensor containing the masks. Shape: (batch_size, sentence_length) i.e. (batch_size, 3)
+            multi_sentence_length (int): Length of the output sequence for the multi-sentence task.
         Returns:
             torch.Tensor: Output of the model. Shape: (batch_size, sentence_length, label_size) i.e. (batch_size, 3, 19)
         """
-        # encode frames
-        if self.use_joints:
-           raise NotImplementedError("Not implemented yet")
-
-        # autoencoder forward
-        encoder_out = self.encoder(x_frames, mask)
-
+        # encode
+        if self.use_mask:
+            shortened_mask = mask[:, :self.sentence_length]
+        else:
+            shortened_mask = None
+        encoder_out = self.encoder(x_frames, shortened_mask)
         encoder_out = encoder_out[-1]
         # decode
-        decoder_out = self.decoder(x=encoder_out)
-        return decoder_out
+        if self.multi_sentence:
+            return self.decoder(x=encoder_out, output_size=multi_sentence_length)
+        return self.decoder(x=encoder_out)
 
     def configure_optimizers(self):
         """ Configure the optimizer.
@@ -182,7 +250,7 @@ class LstmClassifier(LightningModule):
             'monitor': 'val_loss/dataloader_idx_0'
         }
     
-    def loss(self, output, labels, mask):
+    def loss(self, output, labels, mask=None):
         """ Calculate the loss.
 
         Args:
@@ -194,7 +262,9 @@ class LstmClassifier(LightningModule):
         """
         batch_size = output.shape[0]
         loss = torch.zeros(batch_size, device=output.device)
-        for i in range(self.sentence_length):
+        if mask is None:
+            mask = torch.ones(batch_size, labels.shape[1], device=output.device)
+        for i in range(labels.shape[1]):
             loss += self.loss_fn(output[:, i, :], labels[:, i]) * mask[:, i]
         
         return loss.sum() / batch_size
@@ -212,19 +282,30 @@ class LstmClassifier(LightningModule):
         Returns:
             torch.Tensor: Loss.
         """
-        frames, joints, labels = batch
+        if self.dataset == 'ARC-GEN':
+            frames, labels = batch
+        else:
+            frames, joints, labels = batch
         
         # random mask for each input
-        mask = self.get_random_mask(frames.size(0))
+        if self.use_mask:
+            mask = self.get_random_mask(frames.size(0), labels.size(1))
+        else:
+            mask = None
 
         if self.use_augmentation:
             augment_action = not mask[0][0]
             augment_color = not mask[0][1]
-            augment_object = not mask[0][2]
-            frames = self.augmentation(frames, augment_action, augment_color, augment_object)
+            if self.sentence_length == 3:
+                augment_object = not mask[0][2]
+                frames = self.augmentation(frames, augment_action, augment_color, augment_object)
+            else:
+                augment_material = not mask[0][2]
+                augment_object = not mask[0][3]
+                frames = self.augmentation(frames, augment_action, augment_color, augment_object, augment_material)
 
-        if self.use_joints:
-            output = self(frames, mask, joints)
+        if self.multi_sentence:
+            output = self(frames, mask, multi_sentence_length=labels.shape[1])
         else:
             output = self(frames, mask)
         loss = self.loss(output, labels, mask)
@@ -240,10 +321,13 @@ class LstmClassifier(LightningModule):
         """
         epoch_action_acc = self.training_action_correct * 100 / self.training_total
         epoch_color_acc = self.training_color_correct * 100 / self.training_total
+        epoch_material_acc = self.training_material_correct * 100 / self.training_total
         epoch_object_acc = self.training_object_correct * 100 / self.training_total
         epoch_acc = (epoch_action_acc + epoch_color_acc + epoch_object_acc) / 3
         self.log('train_acc_action', epoch_action_acc, on_step=False, on_epoch=True)
         self.log('train_acc_color', epoch_color_acc, on_step=False, on_epoch=True)
+        if self.sentence_length == 4:
+            self.log('train_acc_material', epoch_material_acc, on_step=False, on_epoch=True)
         self.log('train_acc_object', epoch_object_acc, on_step=False, on_epoch=True)
         self.log('train_acc', epoch_acc, on_step=False, on_epoch=True)
         self.reset_metrics_train()
@@ -251,11 +335,20 @@ class LstmClassifier(LightningModule):
     
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         """ Same as training step."""
-        frames, joints, labels = batch
-        mask = torch.ones(frames.size(0), 3, device=frames.device)
+        if self.dataset == 'ARC-GEN':
+            frames, labels = batch
+        else:
+            frames, joints, labels = batch
 
-        if self.use_joints:
-            output = self(frames, mask, joints)
+        if self.multi_sentence and self.use_mask:
+            mask = torch.ones(frames.size(0), labels.size(1), device=frames.device)
+        elif self.use_mask:
+            mask = torch.ones(frames.size(0), self.sentence_length, device=frames.device)
+        else:
+            mask = None
+
+        if self.multi_sentence:
+            output = self(frames, mask, multi_sentence_length=labels.shape[1])
         else:
             output = self(frames, mask)
         loss = self.loss(output, labels, mask)
@@ -274,20 +367,30 @@ class LstmClassifier(LightningModule):
         """ Same as training epoch end."""
         epoch_action_acc = self.val_action_correct * 100 / self.val_total
         epoch_color_acc = self.val_color_correct * 100 / self.val_total
+        epoch_material_acc = self.val_material_correct * 100 / self.val_total
         epoch_object_acc = self.val_object_correct * 100 / self.val_total
         epoch_acc = (epoch_action_acc + epoch_color_acc + epoch_object_acc) / 3
         self.log('val_acc_action', epoch_action_acc, on_step=False, on_epoch=True)
         self.log('val_acc_color', epoch_color_acc, on_step=False, on_epoch=True)
+        if self.sentence_length == 4:
+            self.log('val_acc_material', epoch_material_acc, on_step=False, on_epoch=True)
         self.log('val_acc_object', epoch_object_acc, on_step=False, on_epoch=True)
         self.log('val_acc', epoch_acc, on_step=False, on_epoch=True)
 
         # generalization validation
-        epoch_action_acc = self.val_gen_action_correct * 100 / self.val_gen_total
-        epoch_color_acc = self.val_gen_color_correct * 100 / self.val_gen_total
-        epoch_object_acc = self.val_gen_object_correct * 100 / self.val_gen_total
+        try:
+            epoch_action_acc = self.val_gen_action_correct * 100 / self.val_gen_total
+            epoch_color_acc = self.val_gen_color_correct * 100 / self.val_gen_total
+            epoch_object_acc = self.val_gen_object_correct * 100 / self.val_gen_total
+        except:
+            epoch_action_acc = 0
+            epoch_color_acc = 0
+            epoch_object_acc = 0
         epoch_acc = (epoch_action_acc + epoch_color_acc + epoch_object_acc) / 3
         self.log('val_acc_action_gen', epoch_action_acc, on_step=False, on_epoch=True)
         self.log('val_acc_color_gen', epoch_color_acc, on_step=False, on_epoch=True)
+        if self.sentence_length == 4:
+            self.log('val_acc_material_gen', epoch_material_acc, on_step=False, on_epoch=True)
         self.log('val_acc_object_gen', epoch_object_acc, on_step=False, on_epoch=True)
         self.log('val_acc_gen', epoch_acc, on_step=False, on_epoch=True)
 
@@ -295,6 +398,21 @@ class LstmClassifier(LightningModule):
         print_with_time(f"Epoch {self.current_epoch} val_acc: {epoch_acc}")
 
     def calculate_accuracy(self, output, labels, train=True, gen=False):
+        """ Calculate the accuracy of the model.
+
+        Args:
+            output (torch.Tensor): Output of the model. Shape: (batch_size, sentence_length, label_size) i.e. (batch_size, 3, label_size)
+            labels (torch.Tensor): Labels of the data. Shape: (batch_size, sentence_length)
+            train (bool): Whether to calculate the training accuracy or the validation accuracy.
+        """
+        if self.sentence_length == 3:
+            self.action_color_object_accuracy(output, labels, train, gen)
+        elif self.sentence_length == 4:
+            self.action_color_material_object_accuracy(output, labels, train, gen)
+        else:
+            raise NotImplementedError
+    
+    def action_color_object_accuracy(self, output, labels, train=True, gen=False):
         """ Calculate the accuracy of the model.
 
         Args:
@@ -327,10 +445,54 @@ class LstmClassifier(LightningModule):
 
             self.val_total += labels.shape[0]
 
+    def action_color_material_object_accuracy(self, output, labels, train=True, gen=False):
+        """ Calculate the accuracy of the model.
+
+        Args:
+            output (torch.Tensor): Output of the model. Shape: (batch_size, sentence_length, label_size) i.e. (batch_size, 3, label_size)
+            labels (torch.Tensor): Labels of the data. Shape: (batch_size, sentence_length)
+            train (bool): Whether to calculate the training accuracy or the validation accuracy.
+        """
+        if self.multi_sentence:
+            r = output.shape[1] // 4
+        else:
+            r = 1
+
+        for i in range(r):
+            _, action_output_batch = torch.max(output[:, i*4, :], dim=1)
+            _, color_output_batch = torch.max(output[:, i*4+1, :], dim=1)
+            _, material_output_batch = torch.max(output[:, i*4+2, :], dim=1)
+            _, object_output_batch = torch.max(output[:, i*4+3, :], dim=1)
+
+            if train:
+                self.training_action_correct += torch.sum(action_output_batch == labels[:, i*4])
+                self.training_color_correct += torch.sum(color_output_batch == labels[:, i*4+1])
+                self.training_material_correct += torch.sum(material_output_batch == labels[:, i*4+2])
+                self.training_object_correct += torch.sum(object_output_batch == labels[:, i*4+3])
+
+                self.training_total += labels.shape[0]
+            elif gen:
+                # generalization validation
+                self.val_gen_action_correct += torch.sum(action_output_batch == labels[:, i*4])
+                self.val_gen_color_correct += torch.sum(color_output_batch == labels[:, i*4+1])
+                self.val_gen_material_correct += torch.sum(material_output_batch == labels[:, i*4+2])
+                self.val_gen_object_correct += torch.sum(object_output_batch == labels[:, i*4+3])
+
+                self.val_gen_total += labels.shape[0]
+            else:
+                # normal validation
+                self.val_action_correct += torch.sum(action_output_batch == labels[:, i*4])
+                self.val_color_correct += torch.sum(color_output_batch == labels[:, i*4+1])
+                self.val_material_correct += torch.sum(material_output_batch == labels[:, i*4+2])
+                self.val_object_correct += torch.sum(object_output_batch == labels[:, i*4+3])
+
+                self.val_total += labels.shape[0]
+
     def reset_metrics_train(self):
         """Reset metrics for training"""
         self.training_action_correct = 0
         self.training_color_correct = 0
+        self.training_material_correct = 0
         self.training_object_correct = 0
         self.training_total = 0
     
@@ -339,10 +501,12 @@ class LstmClassifier(LightningModule):
         # normal validation
         self.val_action_correct = 0
         self.val_color_correct = 0
+        self.val_material_correct = 0
         self.val_object_correct = 0
         self.val_total = 0
         # generalization validation
         self.val_gen_action_correct = 0
         self.val_gen_color_correct = 0
+        self.val_gen_material_correct = 0
         self.val_gen_object_correct = 0
         self.val_gen_total = 0
