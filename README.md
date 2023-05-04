@@ -61,6 +61,7 @@ I use PyTorch Lightning for training and WandB for logging. The code is structur
 ## Notes
 - In the code the datasets are referred to as ``multimodal`` and ``arcgen``, which are Volquardsen et al.'s dataset and ARCoGen respectively. In the thesis I refer to them as VLWW and ARCoGen.
 - The code in the tools folder may not well documented and is not part of the actual codebase. It is just a collection of some tools I used throughout the thesis, which might still be useful for someone.
+- You can find the codebase for the creation of the ARCoGen dataset [here](https://github.com/Ramtin-Nouri/ArCoGen.git)
 
 # Credits
 - Starting point of implementation was Volquardsen et al's https://github.com/Casparvolquardsen/Compositional-Generalization-in-Multimodal-Language-Learning 
