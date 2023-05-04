@@ -10,7 +10,7 @@ class DataAugmentation():
     """ Data augmentation class for the training set.
     
     Provides a method to apply a set of data augmentation transformations to a
-    given image.
+    given image. It ss a callable module for PyTorch Lightning.
     """
 
     def __init__(self):
@@ -22,6 +22,10 @@ class DataAugmentation():
 
         Args:
             batch (torch.Tensor): Batch of image sequences to apply the transformations to. Shape: (B, T, C, H, W)
+            augment_action (bool): Whether to apply the action augmentation.
+            augment_color (bool): Whether to apply the color augmentation.
+            augment_object (bool): Whether to apply the object augmentation.
+            augment_material (bool): Whether to apply the material augmentation.
 
         Returns:
             torch.Tensor: Batch of transformed image sequences. Shape: (B, T, C, H, W)
@@ -35,6 +39,14 @@ class DataAugmentation():
 
     def create_compose(self, augment_action, augment_color, augment_object):
         """ Creates a composition of data augmentation transformations.
+
+        Depending on the given arguments, different transformations are applied.
+        Transformations include:
+            - Random rotation
+            - Random horizontal flip
+            - Random color jitter
+            - Random grayscale
+            - Random Gaussian blur
 
         Args:
             augment_action (bool): Whether to apply the action augmentation.
@@ -71,6 +83,8 @@ class RandomSequenceFlip(nn.Module):
     to have [...,T, C, H, W] shape, where ... means an arbitrary number of leading
     dimensions.
     Implementation very similar to the one in torchvision.transforms.RandomHorizontalFlip.
+
+    Not used in the final model, because it did not improve the results.
 
     Args:
         index (int): The dimension to reverse.
@@ -109,6 +123,8 @@ class Affine(nn.Module):
 
     The maximum scale and translation are calculated based on the sampled angle.
     Some of the values are hard-coded for simplicity and may not generalize well to other image sizes.
+
+    Not used in the final model, because it did not improve the results.
     
     Args:
         degrees (list): Range of degrees to sample from.
@@ -155,6 +171,8 @@ class Affine(nn.Module):
 
 class RandomColorShift(nn.Module):
     """Randomly shift the color channels of the given image sequence.
+
+    Not used in the final model, because it did not improve the results.
 
     Args:
         sigma (float): Standard deviation of the normal distribution to sample from.

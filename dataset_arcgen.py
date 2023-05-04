@@ -189,9 +189,6 @@ class ArcGenDataset(Dataset):
             i += 1
         cap.release()
 
-        #print(len(frames))
-        # TODO: cap to fix length + pad preceding zeros
-
         frames = torch.stack(frames) # (sequence_length, height, width, channels)
         frames = frames.permute(0, 3, 1, 2) # (sequence_length, channels, height, width)
         frames = frames.float() / 255.0
@@ -229,18 +226,35 @@ class DataModule(LightningDataModule):
         self.transform = transforms.Normalize(mean, std)
 
     def setup(self, stage=None):
+        """ Sets up the datasets."""
         self.train_dataset = ArcGenDataset(self.config, mode='train', transform=self.transform)
         self.val_dataset = ArcGenDataset(self.config, mode='val', transform=self.transform)
         self.test_dataset = ArcGenDataset(self.config, mode='test', transform=self.transform)
         self.test_val_dataset = ArcGenDataset(self.config, mode='test_val', transform=self.transform)
 
     def train_dataloader(self):
+        """ Returns the training dataloader.
+        
+        Returns:
+            train_loader (torch.utils.data.DataLoader): Training dataloader.
+        """
         return DataLoader(self.train_dataset, batch_size=self.config['batch_size'], shuffle=True, num_workers=self.config["num_workers"])
 
     def val_dataloader(self):
+        """ Returns both the validation and test-validation dataloaders.
+        Test-validation is a small subset of the compositional generalization test set, used for validation.
+
+        Returns:
+            [val_loader, test_val_loader] (list): List of validation and test-validation dataloaders.
+        """
         val_loader = DataLoader(self.val_dataset, batch_size=self.config['batch_size'], shuffle=False, num_workers=self.config["num_workers"])
         test_val_loader = DataLoader(self.test_val_dataset, batch_size=self.config['batch_size'], shuffle=False, num_workers=self.config["num_workers"])
         return [val_loader, test_val_loader]
 
     def test_dataloader(self):
+        """ Returns the test dataloader.
+
+        Returns:
+            test_loader (torch.utils.data.DataLoader): Test dataloader.
+        """
         return DataLoader(self.test_dataset, batch_size=self.config['batch_size'], shuffle=False, num_workers=self.config["num_workers"])
