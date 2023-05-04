@@ -91,7 +91,6 @@ class LstmEncoder(LightningModule):
         """
         h_t, c_t = self.init_hidden(x.shape[0])
         if self.use_joints:
-            #TODO: add the joints to the input
             print_warning("Joints are not yet implemented in the LSTM model.")
         seq_len = x.shape[1]
 
@@ -149,7 +148,6 @@ class CnnDecoder(LightningModule):
     def __init__(self, config):
         super().__init__()
         conv_features = config["convolution_layers_decoder"]
-        # TODO: implement joints branch
         input_shape = config["convlstm_layers"][-1]
         self.num_joints = config["num_joints"]
         self.use_joints = config["use_joints"]
@@ -272,8 +270,7 @@ class LstmAutoencoder(LightningModule):
         Returns:
             torch.Tensor: Loss of the model
         """
-        x_frames, x_joints, _ = batch
-        # TODO: add joints to the input
+        x_frames, _, _ = batch
 
         out = self(x_frames[:, :-self.predict_ahead]) # feed all frames except the last one
         target = x_frames[:, self.predict_ahead:] # target is the next frame respectively
@@ -293,7 +290,7 @@ class LstmAutoencoder(LightningModule):
             torch.Tensor: Predicted frames. Shape: (batch_size, 3, height, width) i.e. (batch_size, 3, 224, 398)
             torch.Tensor: Predicted joints. Shape: (batch_size, num_joints) (Only if use_joints is True)
         """
-        x_frames, x_joints, _ = batch
+        x_frames, _, _ = batch
         return self(x_frames[:, :-self.predict_ahead, :, :, :])[:,-1]
         
 

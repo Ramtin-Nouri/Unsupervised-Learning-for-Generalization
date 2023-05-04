@@ -155,17 +155,33 @@ class CaterModule(LightningDataModule):
         self.transform = transforms.Normalize(mean, std)
 
     def setup(self, stage=None):
+        """ Sets up the datasets."""
         self.train_dataset = CaterDataset(self.config, mode='train', transform=self.transform)
         self.val_dataset = CaterDataset(self.config, mode='val', transform=self.transform)
         self.test_dataset = CaterDataset(self.config, mode='test', transform=self.transform)
 
     def train_dataloader(self):
+        """ Returns the training dataloader.
+        
+        Returns:
+            DataLoader: Training dataloader.
+        """
         return DataLoader(self.train_dataset, batch_size=self.config['batch_size'], shuffle=True, num_workers=self.config["num_workers"])
 
     def val_dataloader(self):
+        """ Returns the validation dataloader.
+
+        Returns:
+            DataLoader: Validation dataloader.
+        """
         val_loader = DataLoader(self.val_dataset, batch_size=self.config['batch_size'], shuffle=False, num_workers=self.config["num_workers"])
         return val_loader
 
     def test_dataloader(self):
+        """ Returns the test dataloader.
+
+        Returns:
+            DataLoader: Test dataloader.
+        """
         test_loader = DataLoader(self.test_dataset, batch_size=self.config['batch_size'], shuffle=False, num_workers=self.config["num_workers"])
         return test_loader

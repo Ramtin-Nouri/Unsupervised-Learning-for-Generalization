@@ -19,6 +19,7 @@ def print_fail(text):
     print_color(text, "fail")
 
 def print_with_time(string):
+    """Prints string with current time, in green."""
     print_color(f"{datetime.now().strftime('%d-%m-%Y %H:%M:%S')} : {str(string)}\n", "green")
 # ------------------------------------------------------------------------------
 
