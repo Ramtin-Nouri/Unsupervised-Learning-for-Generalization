@@ -26,7 +26,7 @@ The config file holds the following information:
     - use_mask: Whether to use the masking loss or not.
 
 - dataset: Subsection for the dataset parameters.
-    - dataset_name: The name of the dataset to use.
+    - dataset_name: The name of the dataset to use. Can be either Multimodal or ARCGEN
     - data_path: The root directory of the dataset.
     - width: The width of the images.
     - height: The height of the images.
